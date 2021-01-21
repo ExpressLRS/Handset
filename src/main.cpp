@@ -36,6 +36,8 @@ extern "C" {
 #define SYNC_PACKET     0b10
 #define TLM_PACKET      0b11
 
+#define CRSF_FRAMETYPE_LINK_STATISTICS 0x14
+
 enum SWITCH_POSITIONS
 {
    SWITCH_LOW,
@@ -44,7 +46,6 @@ enum SWITCH_POSITIONS
 };
 
 // params
-
 enum EDITABLE_PARAMS {
    PARAM_NONE,    // must be first
    PARAM_POWER,
@@ -75,6 +76,11 @@ extern "C" {
 
 // debug baud rate
 #define BAUDRATE (460800U)
+
+// low battery warning threshold in tenths of a volt
+#define LOW_BAT_THRESHOLD (34)
+
+bool batteryLow = false;
 
 unsigned long interval, adcInterval;
 unsigned int nSamples=0;
@@ -320,10 +326,87 @@ void EXTI5_9_IRQHandler(void)
 } // extern "C"
 
 // ==================================================
-#define CRSF_FRAMETYPE_LINK_STATISTICS 0x14
+
+/** extract the gpio port value from a composite port/pin value
+ * 
+ */
+uint32_t PORT(uint32_t compositeGPIOid) {
+    uint32_t p = compositeGPIOid >> 16;
+    switch (p) {
+        case PORTA:
+            return GPIOA;
+        case PORTB:
+            return GPIOB;
+        case PORTC:
+            return GPIOC;
+        default:
+            printf("XXX bad port id %lu\n\r", p);
+            while(true);
+    }
+
+    // can't get here, but suppresses compiler warning
+    return 0;
+}
+
+
+
+/** Sound the beeper
+ * NB blocking for duration ms! Will need an async beeper function
+ * @param duration time in ms to beep for
+ * 
+ */
+void beep(uint32_t duration)
+{
+   gpio_bit_set(PORT(GPIO_BUZZER), PIN(GPIO_BUZZER));
+   delay(duration);
+   gpio_bit_reset(PORT(GPIO_BUZZER), PIN(GPIO_BUZZER));
+}
+
+
+/** Handle sequences of beeps
+ * 
+ *  Remember when the current/last beep started,
+ *    if now is after beep start + duration, stop the beep
+ * 
+ *    if now is after beep start + interval, start a new beep
+ * 
+ * @param interval the delay between beeps in ms
+ * @param duration the length of each beep in ms
+ * 
+ * duration should be less than interval. duration of 0 disables beeping
+ * 
+ */
+bool handleBeeps(uint16_t interval, uint16_t duration)
+{
+   static uint32_t beepStartTime = 0;
+
+   if (duration == 0) {
+      // make sure the beeper is off
+      gpio_bit_reset(PORT(GPIO_BUZZER), PIN(GPIO_BUZZER));
+      return false;
+   }
+
+   uint32_t now = millis();
+
+   if (now > (beepStartTime + interval)) {
+      // start the beeper
+      beepStartTime = now;
+      gpio_bit_set(PORT(GPIO_BUZZER), PIN(GPIO_BUZZER));
+      return true;
+   }
+
+   if (now > (beepStartTime + duration)) {
+      // stop the beeper
+      gpio_bit_reset(PORT(GPIO_BUZZER), PIN(GPIO_BUZZER));
+      return false;
+   }
+
+   return false;
+}
+
 
 /**
- * Test for our view of if the drone is armed.
+ * Test for our view of if the drone is armed. (armed as in enabled/ready to fly!)
  * Requires that the first switch is the arm switch.
  * Conservatively assume that either middle or high position means armed.
  */
@@ -383,35 +466,6 @@ void setSentSwitch(uint8_t index, uint8_t value)
    }
 }
 
-uint32_t PORT(uint32_t compositeGPIOid) {
-    uint32_t p = compositeGPIOid >> 16;
-    switch (p) {
-        case PORTA:
-            return GPIOA;
-        case PORTB:
-            return GPIOB;
-        case PORTC:
-            return GPIOC;
-        default:
-            printf("XXX bad port id %lu\n\r", p);
-            while(true);
-    }
-
-    // can't get here, but suppresses compiler warning
-    return 0;
-}
-
-/** Sound the beeper
- * NB blocking for duration ms! Will need an async beeper function
- * @param duration time in ms to beep for
- * 
- */
-void beep(uint32_t duration)
-{
-   gpio_bit_set(PORT(GPIO_BUZZER), PIN(GPIO_BUZZER));
-   delay(duration);
-   gpio_bit_reset(PORT(GPIO_BUZZER), PIN(GPIO_BUZZER));
-}
 
 void ProcessTLMpacket()
 {
@@ -1271,12 +1325,15 @@ void updateDisplayNormal()
       uint16_t rawBat = adc_regular_data_read(ADC1);
       // printf("rawBat: %u\n\r", rawBat);
 
-      // max reading is 4096, represents 3V3 at the pin. Ratio on the resistor divider is about 4
-      // includes a factor of 10 for 1 place of fixed point precision and a fudge factor for calibration
+      // max reading is 4096, represents 3V3 at the pin. Ratio on the resistor divider is about 4.
+      // Includes a factor of 10 for 1 place of fixed point precision and a fudge factor for calibration
       uint16_t inputVoltage = rawBat*135 / 4096;
       // printf("inputV %u\n\r", inputVoltage);
 
-      if (inputVoltage < 34) BACK_COLOR = RED;
+      if (inputVoltage < LOW_BAT_THRESHOLD) {
+         BACK_COLOR = RED;
+         batteryLow = true;
+      }
 
       sprintf((char*)buffer, "BAT %u.%u", inputVoltage / 10, inputVoltage % 10);
       LCD_ShowString(35, 144, buffer, WHITE);
@@ -1749,6 +1806,10 @@ int main(void)
       //    printf("%lu %lu %lu %lu\n\r", aud_roll.getCurrent(), aud_pitch.getCurrent(), aud_throttle.getCurrent(), aud_yaw.getCurrent());
       //    nSamples = 0;
       // }
+
+      // provide warning beeps if the battery is getting low
+      uint16_t duration = batteryLow ? 25 : 0;
+      handleBeeps(5000, duration);
 
       loopCounter++;
    } // event loop

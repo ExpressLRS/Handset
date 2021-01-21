@@ -215,6 +215,9 @@ enum ports {
 #define GPIO_BUZZER PA4
 
 // Gimbal calibration values
+// These are for the Jumper hall gimbals, the sensors produce less than half the
+// output range compared to the FrSky gimbals. If we were using these long term
+// the ADCs would need to be reconfigured to give more resolution.
 #define ADC_PITCH_REVERSED false
 #define ADC_PITCH_MIN 744u
 #define ADC_PITCH_CTR 1262u
