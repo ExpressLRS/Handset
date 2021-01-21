@@ -20,9 +20,6 @@ Heavily modified/simplified by Alessandro Carcione 2020 for ELRS project
 
 #define ICACHE_RAM_ATTR
 
-// E28-12 and both GNICERF modules can use the full output range
-#define MAX_PRE_PA_POWER 13
-
 // E28-20 max is -2
 // #define MAX_PRE_PA_POWER -2
 
@@ -73,6 +70,8 @@ public:
     void reset();
 
     void ICACHE_RAM_ATTR WriteCommand(SX1280_RadioCommands_t opcode, uint8_t *buffer, uint8_t size);
+    void ICACHE_RAM_ATTR fastWriteCommand(uint8_t *buffer, uint8_t size);
+
     void ICACHE_RAM_ATTR WriteCommand(SX1280_RadioCommands_t command, uint8_t val);
     void ICACHE_RAM_ATTR WriteRegister(uint16_t address, uint8_t *buffer, uint8_t size);
     void ICACHE_RAM_ATTR WriteRegister(uint16_t address, uint8_t value);

@@ -1,8 +1,26 @@
 
 // which board are we using
 
-#define LONGAN_NANO
+// #define LONGAN_NANO
 // #define T_DISPLAY
+#define PCB_V1_0
+
+// TODO make this runtime dynamic
+// define the type of radio module being used 
+
+#define RADIO_E28_12
+// #define RADIO_E28_20
+// #define RADIO_E28_27
+
+#ifdef RADIO_E28_12
+// E28-12 and both GNICERF modules can use the full output range
+#define MAX_PRE_PA_POWER 13
+#elif defined(RADIO_E28_20)
+#define MAX_PRE_PA_POWER (-2)
+#elif defined(RADIO_E28_27)
+#define MAX_PRE_PA_POWER 0
+#endif
+
 
 
 // how many switches do we have?
@@ -134,7 +152,7 @@ enum ports {
 
 // #define SWB_TMP PA13
 #define SWB_LOW  PA13
-#define SWB_HIGH PA14   // PA14 is stuck low, need to add a pullup of 4k7 or a little more
+#define SWB_HIGH PA14
 
 #define SWC_LOW PA15
 #define SWC_HIGH PB3
@@ -142,11 +160,85 @@ enum ports {
 #define SWD_LOW  PB5
 #define SWD_HIGH PB4
 
+// Gimbal calibration values
+#define ADC_PITCH_REVERSED true
+#define ADC_PITCH_MIN 913u
+#define ADC_PITCH_CTR 2404u
+#define ADC_PITCH_MAX 3864u
+
+#define ADC_ROLL_REVERSED false
+#define ADC_ROLL_MIN 57u
+#define ADC_ROLL_CTR 1892u
+#define ADC_ROLL_MAX 3763u
+
+#define ADC_THROTTLE_REVERSED false
+#define ADC_THROTTLE_MIN 820u
+#define ADC_THROTTLE_MAX 3860u
+
+#define ADC_YAW_REVERSED true
+#define ADC_YAW_MIN 343u
+#define ADC_YAW_CTR 1838u
+#define ADC_YAW_MAX 3435u
+
+#elif defined(PCB_V1_0)
+
+#define RADIO_BUSY_PORT GPIOA
+#define RADIO_BUSY_PIN  GPIO_PIN_12
+
+#define RADIO_RESET_PORT GPIOA
+#define RADIO_RESET_PIN GPIO_PIN_11
+
+#define RADIO_RXEN_PORT GPIOB
+#define RADIO_RXEN_PIN GPIO_PIN_11
+
+#define RADIO_TXEN_PORT GPIOA
+#define RADIO_TXEN_PIN GPIO_PIN_8
+
+// rotary encoder button
+#define RE_BUTTON_PORT GPIOC
+#define RE_BUTTON_PIN GPIO_PIN_13
+
+// RC switches
+#define SWA_LOW  PA14
+#define SWA_HIGH PA13
+
+#define SWB_LOW  PC14
+#define SWB_HIGH PC15
+
+#define SWC_LOW  PB3
+#define SWC_HIGH PA15
+
+#define SWD_LOW  PB5
+#define SWD_HIGH PB4
+
+// Buzzer
+#define GPIO_BUZZER PA4
+
+// Gimbal calibration values
+#define ADC_PITCH_REVERSED false
+#define ADC_PITCH_MIN 744u
+#define ADC_PITCH_CTR 1262u
+#define ADC_PITCH_MAX 1824u
+
+#define ADC_ROLL_REVERSED true
+#define ADC_ROLL_MIN 702u
+#define ADC_ROLL_CTR 1207u
+#define ADC_ROLL_MAX 1809u
+
+#define ADC_THROTTLE_REVERSED true
+#define ADC_THROTTLE_MIN 742u
+#define ADC_THROTTLE_MAX 1906u
+
+#define ADC_YAW_REVERSED false
+#define ADC_YAW_MIN 586u
+#define ADC_YAW_CTR 1220u
+#define ADC_YAW_MAX 1890u
+
 #else
 #error "define the board type in config.h"
 #endif
 
-// common to both boards
+// common to all boards
 
 #define RADIO_NSS_PORT GPIOB
 #define RADIO_NSS_PIN GPIO_PIN_12

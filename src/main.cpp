@@ -10,6 +10,7 @@
 
 // Next:
 //    UI improvements
+//    Stick calibration
 //    Auto power limit when disarmed - or full dynamic power?
 
 // #define DEBUG_SUPPRESS
@@ -21,9 +22,9 @@ extern "C" {
 
 #ifdef LONGAN_NANO
 #include "lcd/lcd.h"
-#elif defined(T_DISPLAY)
+#elif defined(T_DISPLAY) || defined(PCB_V1_0)
 #include "lcd-tdisplay/lcd.h"
-#elif
+#else
 #error "Define the board type before compiling"
 #endif
 
@@ -155,12 +156,12 @@ OneAUDfilterInt aud_throttle(currentFilter.minCutoff, currentFilter.maxCutoff, i
 
 // power values in prePA dBm (i.e. what the sx1280 is outputting to the PA or antenna if no PA present)
 // int radioPower = -18; // low power testing to check crc/fec behaviour using e28-12
-// int radioPower = -10; // default for e28-27 (50mW)
+int radioPower = -10; // default for e28-27 (50mW)
 // int radioPower = -8; // safe for any module
 // int radioPower = -2; // dBm. Max for e28-20
 // int radioPower = 0; // dBm. Max for e28-27
 // int radioPower = 3; // around 100mW on gnice-27
-int radioPower = 12; // dBm. Testing with e28-12
+// int radioPower = 12; // dBm. Testing with e28-12
 // gnice-27 max is 13
 
 
@@ -169,7 +170,6 @@ int radioPower = 12; // dBm. Testing with e28-12
 bool isRXconnected = false;
 
 volatile uint8_t NonceTX = 0;
-// bool WaitRXresponse = false;  // XXX is this needed?
 
 uint32_t SyncPacketLastSent = 0;
 uint32_t LastTLMpacketRecvMillis = 0;
@@ -224,12 +224,26 @@ void DMA0_Channel0_IRQHandler(void)
       // clear interrupt bit or mcu will busy hang
       dma_interrupt_flag_clear(DMA0, DMA_CH0, DMA_INT_FLAG_FTF);
 
+      // TODO define some constants in config.h for indexing instead of using an ifdef here
+      #ifdef PCB_V1_0
+
+      // current: Y(0) T(1) P(3) R(2)
+
+      aud_roll.update(adc_value[2]);
+      aud_pitch.update(adc_value[3]);
+      aud_throttle.update(adc_value[1]);
+      aud_yaw.update(adc_value[0]);
+
+      #else
+
       // current: Y(0) T(1) P(2) R(3)
 
       aud_roll.update(adc_value[3]);
       aud_pitch.update(adc_value[2]);
       aud_throttle.update(adc_value[1]);
       aud_yaw.update(adc_value[0]);
+
+      #endif // PCB_V1_0
 
       nSamples++;
       now = micros();
@@ -261,43 +275,18 @@ void HandleFHSS()
   }
 }
 
-
-// TODO This needs converting to GD32 handler
 void TXdoneISR()
 {
    // printf("TXdone!\n\r");
-   // NonceTX++; // must be done before callback
+
    HandleFHSS();
    HandleTLM();
-
-   // // is there a pending rate change?
-   // if (nextRFLinkRate >= 0) {
-   //    SetRFLinkRate((uint8_t)nextRFLinkRate);
-   //    isRXconnected = false;
-   //    LastTLMpacketRecvMillis = 0; // kick the tx into reconnecting straight away
-   //    nextRFLinkRate = -1; // so that the button can be used again
-   //    #ifdef USE_TFT
-   //    lcdNeedsRedraw = true; // trigger a screen update to show the new rate
-   //    #endif
-   //    sendStateNeeded = true; // update will be done from loop
-   // }
-
-   // // is there a pending power change?
-   // if (nextRadioPower != NONE_PENDING) {
-   //    Radio.SetOutputPower(nextRadioPower);
-   //    // Serial.print("power set to ");Serial.println(nextRadioPower);
-   //    nextRadioPower = NONE_PENDING; // so that the button can be used again
-   //    #ifdef USE_TFT
-   //    lcdNeedsRedraw = true; // trigger a screen update to show the new rate
-   //    #endif
-   //    sendStateNeeded = true; // update will be done from loop
-   // }
 
    // RadioIsIdle = true;
 }
 
 
-// use this for rx and tx done isrs on B8 and B9
+// use this for rx and tx done isrs on B8 and B9 (connected to radio DIOs)
 void EXTI5_9_IRQHandler(void)
 {
    if (exti_interrupt_flag_get(EXTI_8) == SET) {
@@ -412,74 +401,62 @@ uint32_t PORT(uint32_t compositeGPIOid) {
     return 0;
 }
 
+/** Sound the beeper
+ * NB blocking for duration ms! Will need an async beeper function
+ * @param duration time in ms to beep for
+ * 
+ */
+void beep(uint32_t duration)
+{
+   gpio_bit_set(PORT(GPIO_BUZZER), PIN(GPIO_BUZZER));
+   delay(duration);
+   gpio_bit_reset(PORT(GPIO_BUZZER), PIN(GPIO_BUZZER));
+}
 
 void ProcessTLMpacket()
 {
-//   printf("TLMpacket\n\r");
-  uint8_t calculatedCRC = CalcCRC(radio.RXdataBuffer, 7) + CRCCaesarCipher;
-  uint8_t inCRC = radio.RXdataBuffer[7];
-  if ((inCRC != calculatedCRC))
-  {
+   //   printf("TLMpacket\n\r");
+   uint8_t calculatedCRC = CalcCRC(radio.RXdataBuffer, 7) + CRCCaesarCipher;
+   uint8_t inCRC = radio.RXdataBuffer[7];
+   if ((inCRC != calculatedCRC))
+   {
       #ifndef DEBUG_SUPPRESS
-      printf("TLM crc error\n\r");
+      printf("TLM sw crc!\n\r");
       #endif
       return;
-  }
+   }
 
-  uint8_t type = radio.RXdataBuffer[0] & TLM_PACKET;
-  uint8_t packetAddr = (radio.RXdataBuffer[0] & 0b11111100) >> 2;
-  uint8_t TLMheader = radio.RXdataBuffer[1];
+   uint8_t type = radio.RXdataBuffer[0] & TLM_PACKET;
+   uint8_t packetAddr = (radio.RXdataBuffer[0] & 0b11111100) >> 2;
+   uint8_t TLMheader = radio.RXdataBuffer[1];
 
-  if (packetAddr != DeviceAddr)
-  {
-    #ifndef DEBUG_SUPPRESS
-    printf("TLM device address error\n\r");
-    #endif
-    return;
-  }
+   if (packetAddr != DeviceAddr)
+   {
+      #ifndef DEBUG_SUPPRESS
+      printf("TLM device address error\n\r");
+      #endif
+      return;
+   }
 
+   //   packetCounteRX_TX++;
 
-//   packetCounteRX_TX++;
+   if (type != TLM_PACKET)
+   {
+      #ifndef DEBUG_SUPPRESS
+      printf("TLM type error %u\n\r", type);
+      #endif
+      return;
+   }
 
-  if (type != TLM_PACKET)
-  {
-    #ifndef DEBUG_SUPPRESS
-    printf("TLM type error %u\n\r", type);
-    #endif
-    return;
-  }
+   isRXconnected = true;
+   LastTLMpacketRecvMillis = millis();
 
-  // turn on the led if this is a state change
-//   if (!isRXconnected) {
-//     digitalWrite(GPIO_PIN_LED, 1);
-//   }
-
-  isRXconnected = true;
-  LastTLMpacketRecvMillis = millis();
-
-  if (TLMheader == CRSF_FRAMETYPE_LINK_STATISTICS)
-  {
-    #ifdef USE_ELRS_CRSF_EXTENSIONS
-    #error not implemented
-    #else
-    rssi = radio.RXdataBuffer[2];
-    snr  = radio.RXdataBuffer[4];
-    lq   = radio.RXdataBuffer[5];
-
-   //  crsf.LinkStatistics.uplink_RSSI_1 = Radio.RXdataBuffer[2];
-   //  crsf.LinkStatistics.uplink_RSSI_2 = 0;
-   //  crsf.LinkStatistics.uplink_SNR = Radio.RXdataBuffer[4];
-   //  crsf.LinkStatistics.uplink_Link_quality = Radio.RXdataBuffer[5];
-
-   //  crsf.LinkStatistics.downlink_SNR = int(Radio.LastPacketSNR * 10);
-   //  crsf.LinkStatistics.downlink_RSSI = 120 + Radio.LastPacketRSSI;
-   //  crsf.LinkStatistics.downlink_Link_quality = linkQuality;
-   //  //crsf.LinkStatistics.downlink_Link_quality = Radio.currPWR;
-   //  crsf.LinkStatistics.rf_Mode = 4 - ExpressLRS_currAirRate_Modparams->index;
-
-   //  crsf.TLMbattSensor.voltage = (Radio.RXdataBuffer[3] << 8) + Radio.RXdataBuffer[6];
-    #endif
-  }
+   if (TLMheader == CRSF_FRAMETYPE_LINK_STATISTICS)
+   {
+      rssi = radio.RXdataBuffer[2];
+      snr = radio.RXdataBuffer[4];
+      lq = radio.RXdataBuffer[5];
+   }
 }
 
 void HandleTLM()
@@ -773,15 +750,15 @@ void spi1_config(void)
    spi_init_struct.clock_polarity_phase = SPI_CK_PL_HIGH_PH_2EDGE; // not certain which setting to use
    spi_init_struct.nss                  = SPI_NSS_SOFT;
 
+   // TODO - confirm these clock rates are what they claim to be
    // spi_init_struct.prescale             = SPI_PSC_32; // 1.6 MHz - must be running off a ~50MHz clock
-   spi_init_struct.prescale             = SPI_PSC_16; // 3.2 MHz -- TODO experiment with higher freqs. 1280 is 18MHz max
+   // spi_init_struct.prescale             = SPI_PSC_16; // 3.2 MHz
    // spi_init_struct.prescale             = SPI_PSC_8; // 6.4 MHz
-   // spi_init_struct.prescale             = SPI_PSC_4; // 12.8 MHz - works in handset, not on dev board?
+   spi_init_struct.prescale             = SPI_PSC_4; // 12.8 MHz -- works in v3 dag prototype, works on spring board test setup
 
    spi_init_struct.endian               = SPI_ENDIAN_MSB;
    spi_init(SPI1, &spi_init_struct);
 
-   // spi_crc_polynomial_set(SPI1,7); needed?
    spi_enable(SPI1);
 }
 
@@ -792,7 +769,15 @@ void setup() {
    clock_config();
 
    // need to remap jtag off
-   gpio_pin_remap_config(GPIO_SWJ_DISABLE_REMAP, ENABLE); // ENABLE to disable jtag - how very confusing!
+   // default call isn't disabling all the pins, leaving PA14 stuck with an internal pull down resistor
+   // that has to be fought with a stronger external pull-up.
+   // The following link suggests that a different disable value is needed, bits 100 instead of bits 010
+   // https://blog.csdn.net/zoomdy/article/details/101386700
+   
+   // gpio_pin_remap_config(GPIO_SWJ_DISABLE_REMAP, ENABLE); // ENABLE to disable jtag - how very confusing!
+
+   // work-around - set the bits directly
+   AFIO_PCF0 = (AFIO_PCF0 & 0xF8FFFFFF) | 0x04000000;
 
    // connect port to USARTx_Tx
    gpio_init(GPIOA, GPIO_MODE_AF_PP, GPIO_OSPEED_50MHZ, GPIO_PIN_9);
@@ -859,6 +844,11 @@ void setup() {
    gpio_init(PORT(SWD_LOW), GPIO_MODE_IPU, GPIO_OSPEED_2MHZ, PIN(SWD_LOW));
    #else
    #error "Switch defs needed"
+   #endif
+
+   #ifdef GPIO_BUZZER
+   gpio_init(PORT(GPIO_BUZZER), GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, PIN(GPIO_BUZZER));
+   gpio_bit_reset(PORT(GPIO_BUZZER), PIN(GPIO_BUZZER));
    #endif
 
    uart_config();
@@ -1003,36 +993,23 @@ uint32_t scaleADCtoCRSF(const uint32_t min, const uint32_t centre, const uint32_
 
 uint32_t scaleYawData(uint16_t raw_adc_yaw)
 {
-   const bool reversed = true;
-   const static uint16_t ADC_YAW_MIN = 343;
-   const static uint16_t ADC_YAW_CTR = 1838;
-   const static uint16_t ADC_YAW_MAX = 3435;
-
-   uint32_t yaw = scaleADCtoCRSF(ADC_YAW_MIN, ADC_YAW_CTR, ADC_YAW_MAX, raw_adc_yaw, reversed);
+   uint32_t yaw = scaleADCtoCRSF(ADC_YAW_MIN, ADC_YAW_CTR, ADC_YAW_MAX, raw_adc_yaw, ADC_YAW_REVERSED);
 
    return yaw;
 }
 
 uint32_t scaleThrottleData(uint16_t raw_adc_throttle)
 {
-   const bool reversed = false;
-   const static uint16_t ADC_THROTTLE_MIN = 820;
-   const static uint16_t ADC_THROTTLE_MAX = 3860;
    // fake up a midpoint since it's not critical for throttle
    const static uint16_t ADC_THROTTLE_MID = (ADC_THROTTLE_MAX-ADC_THROTTLE_MIN)/2 + ADC_THROTTLE_MIN;
 
-   uint32_t throttle = scaleADCtoCRSF(ADC_THROTTLE_MIN, ADC_THROTTLE_MID, ADC_THROTTLE_MAX, raw_adc_throttle, reversed);
+   uint32_t throttle = scaleADCtoCRSF(ADC_THROTTLE_MIN, ADC_THROTTLE_MID, ADC_THROTTLE_MAX, raw_adc_throttle, ADC_THROTTLE_REVERSED);
    return throttle;
 }
 
 uint32_t scalePitchData(uint16_t raw_adc_pitch)
 {
-   const bool reversed = true;
-   const static uint16_t ADC_PITCH_MIN = 913;
-   const static uint16_t ADC_PITCH_CTR = 2404;
-   const static uint16_t ADC_PITCH_MAX = 3864;
-
-   uint32_t pitch = scaleADCtoCRSF(ADC_PITCH_MIN, ADC_PITCH_CTR, ADC_PITCH_MAX, raw_adc_pitch, reversed);
+   uint32_t pitch = scaleADCtoCRSF(ADC_PITCH_MIN, ADC_PITCH_CTR, ADC_PITCH_MAX, raw_adc_pitch, ADC_PITCH_REVERSED);
 
    return pitch;
 }
@@ -1040,13 +1017,7 @@ uint32_t scalePitchData(uint16_t raw_adc_pitch)
 
 uint32_t scaleRollData(uint16_t raw_adc_roll)
 {
-   const bool reversed = false;
-
-   const static uint16_t ADC_ROLL_MIN = 57;
-   const static uint16_t ADC_ROLL_CTR = 1892;
-   const static uint16_t ADC_ROLL_MAX = 3763;
-
-   uint32_t roll = scaleADCtoCRSF(ADC_ROLL_MIN, ADC_ROLL_CTR, ADC_ROLL_MAX, raw_adc_roll, reversed);
+   uint32_t roll = scaleADCtoCRSF(ADC_ROLL_MIN, ADC_ROLL_CTR, ADC_ROLL_MAX, raw_adc_roll, ADC_ROLL_REVERSED);
 
    return roll;
 }
@@ -1181,7 +1152,15 @@ void SetRFLinkRate(uint8_t index)
    expresslrs_mod_settings_s *const ModParams = get_elrs_airRateConfig(index);
    expresslrs_rf_pref_params_s *const RFperf = get_elrs_RFperfParams(index);
 
-   radio.Config(ModParams->bw, ModParams->sf, ModParams->cr, GetInitialFreq(), ModParams->PreambleLen);
+   #ifdef USE_FLRC
+   if (index == 0) { // special case FLRC for testing
+      radio.ConfigFLRC(GetInitialFreq());
+   } else 
+   #endif
+   {
+      radio.Config(ModParams->bw, ModParams->sf, ModParams->cr, GetInitialFreq(), ModParams->PreambleLen);
+   }
+
 
    setTimerISRInterval(ModParams->interval);
 
@@ -1259,7 +1238,7 @@ void updateDisplayNormal()
       LCD_ShowString(0, 96, (const u8*)"         ", WHITE);
    }
 
-   // debug for a13-15
+   // // debug for a13-15
    // uint8_t p13 = gpio_input_bit_get(PORT(PA13), PIN(PA13));
    // uint8_t p14 = gpio_input_bit_get(PORT(PA14), PIN(PA14));
    // uint8_t p15 = gpio_input_bit_get(PORT(PA15), PIN(PA15));
@@ -1274,7 +1253,7 @@ void updateDisplayNormal()
 
 
    // TTGO has a bigger display, the nano can just use the stuff above
-   #ifdef T_DISPLAY
+   #if defined(T_DISPLAY) || defined(PCB_V1_0)
 
    // ARM flag
    if (isArmed()) {
@@ -1304,6 +1283,16 @@ void updateDisplayNormal()
 
       BACK_COLOR = DARKBLUE;
    } // battery ADC ready to read
+
+   // get the current status of the switches
+   uint32_t newSWA = getSwitchState(SWA_HIGH, SWA_LOW);
+   uint32_t newSWB = getSwitchState(SWB_HIGH, SWB_LOW);
+   uint32_t newSWC = getSwitchState(SWC_HIGH, SWC_LOW);
+   uint32_t newSWD = getSwitchState(SWD_HIGH, SWD_LOW);
+
+   sprintf((char*)buffer, "%lu %lu %lu %lu", newSWA, newSWB, newSWC, newSWD);
+   LCD_ShowString(0, 176, buffer, WHITE);
+
 
    // cpu usage for filters
    sprintf((char*)buffer, "f %6lu us", filterUpdateTime);
@@ -1442,7 +1431,7 @@ int main(void)
    Lcd_Init();
    LCD_Clear(DARKBLUE);
 
-   #ifdef T_DISPLAY
+   #if defined(T_DISPLAY) || defined(PCB_V1_0)
    // lcd backlight - can we hw pwm this? tim1 ch2
    gpio_init(GPIOB, GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, GPIO_PIN_10);
    gpio_bit_set(GPIOB, GPIO_PIN_10);
@@ -1457,6 +1446,11 @@ int main(void)
    int x = LCD_H/2 - l*8/2;
    int y = LCD_W/2 - 8;
    LCD_ShowString(x, y, (u8 const *) msg, WHITE);
+
+   // startup beep?
+   // #ifdef GPIO_BUZZER
+   // beep(50);
+   // #endif
 
    delay(500);
    LCD_Clear(DARKBLUE);
@@ -1505,6 +1499,8 @@ int main(void)
       printf("persistent data not found\n\r");
    }
 
+   // === Next section is the event loop ===
+
    unsigned long lastDebug = 0;
    int lastEncValue = 100;
    uint8_t lastSWA = SWITCH_LOW;
@@ -1543,7 +1539,7 @@ int main(void)
          lastSWB = newSWB;
          lastSWC = newSWC;
          lastSWD = newSWD;
-         switchesHaveMoved = true;
+         switchesHaveMoved = true; // TODO rename as rcSwitchesHaveMoved to distuinguish from UI stuff?
       }
 
       // if a switch has moved, but not for more than the debounce time, then update the active state
@@ -1553,7 +1549,7 @@ int main(void)
          currentSwitches[2] = newSWC;
          currentSwitches[3] = newSWD;
 
-         // printf("switches: %lu %lu %lu %lu\n\r", newSWA, newSWB, newSWC, newSWD);
+         printf("switches: %lu %lu %lu %lu\n\r", newSWA, newSWB, newSWC, newSWD);
 
          // clear the flag so we don't spam this code
          switchesHaveMoved = false;
@@ -1568,15 +1564,17 @@ int main(void)
          lcdRedrawNeeded = true;
       }
 
-      // timeout edit mode if UI hasn't been touched
-      if (paramToChange != PARAM_NONE && ((now - lastButtonTime) > 15000)) {
+      // Timeout edit mode if UI hasn't been touched
+      // Don't worry about wrap around, it's not worth the effort
+      if ((paramToChange != PARAM_NONE) && (now  > (lastButtonTime + 15000))) {
          lastParamToChange = paramToChange;
          paramToChange = PARAM_NONE;
          lcdRedrawNeeded = true;
       }
 
-      // check for long press on the ui button
-      if (uiButtonDown && (now - uiButtonDown) > (1000)) {
+      // Check for long press on the ui button
+      // Don't worry about wrap around
+      if (uiButtonDown && (now > (uiButtonDown + 1000))) {
          // long press
          printf("long press detected\n\r");
          uiButtonDown = 0; // clear the timer so we don't spam through this code
@@ -1607,7 +1605,7 @@ int main(void)
       }
 
       // UI button (press down on the rotary enc)
-      // TODO add double click, use to exit the settings screen
+      // TODO add double click, use to exit the settings screen (or maybe change between screens, or action a menu item?)
       if (buttonMoved && ((now - lastButtonTime) > 5)) { // time for the button to stop bouncing
          // check the current button state, pressed is pin low
          if(RESET == gpio_input_bit_get(RE_BUTTON_PORT, RE_BUTTON_PIN))
@@ -1631,7 +1629,7 @@ int main(void)
             // The encoder count changes by 2 for each click, so ranges have a *2 multiplier
             switch (paramToChange) {
                case PARAM_POWER:
-                  encRange = ((MAX_PRE_PA_POWER + 18 - 1) * 2);
+                  encRange = ((MAX_PRE_PA_POWER + 18) * 2); // MAX_PRE_PA_POWER is the last usable value, not the number of values, so don't subtract 1
                   lastEncValue = (radio.currPWR + 18) * 2 + 100;
                   // printf("currP %d lastEnc %u\n\r", radio.currPWR, lastEncValue);
                   break;
@@ -1712,7 +1710,8 @@ int main(void)
       }
 
       // have we lost connection with the quad?
-      if (isRXconnected && ((now - LastTLMpacketRecvMillis) > RX_CONNECTION_LOST_TIMEOUT))
+      uint32_t localLastTelem = LastTLMpacketRecvMillis; // avoid race conditions
+      if (isRXconnected && ((millis() - localLastTelem) > RX_CONNECTION_LOST_TIMEOUT))
       {
          isRXconnected = false;
       }
@@ -1741,8 +1740,15 @@ int main(void)
             updateDisplayEdit();
          }
 
+         // printf("T %ld Y %ld\n\r", aud_throttle.getCurrent(), aud_yaw.getCurrent());
 
-      } // current time ready for LCD update/debug
+      } // LCD update/debug
+
+      // debug gimbal data
+      // if (nSamples != 0) {
+      //    printf("%lu %lu %lu %lu\n\r", aud_roll.getCurrent(), aud_pitch.getCurrent(), aud_throttle.getCurrent(), aud_yaw.getCurrent());
+      //    nSamples = 0;
+      // }
 
       loopCounter++;
    } // event loop
