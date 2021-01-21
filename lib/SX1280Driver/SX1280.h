@@ -19,6 +19,10 @@ enum InterruptAssignment_
 
 class SX1280Driver
 {
+private:
+    void setupLora();
+    void setupFLRC();
+    void SetPacketParamsFLRC();
 
 public:
     ///////Callback Function Pointers/////
@@ -78,7 +82,10 @@ public:
     void End();
     void SetMode(SX1280_RadioOperatingModes_t OPmode);
     void Config(SX1280_RadioLoRaBandwidths_t bw, SX1280_RadioLoRaSpreadingFactors_t sf, SX1280_RadioLoRaCodingRates_t cr, uint32_t freq, uint8_t PreambleLength);
+    void ICACHE_RAM_ATTR ConfigFLRC(uint32_t freq);
+
     void ConfigModParams(SX1280_RadioLoRaBandwidths_t bw, SX1280_RadioLoRaSpreadingFactors_t sf, SX1280_RadioLoRaCodingRates_t cr);
+    void ConfigModParamsFLRC(SX1280_RadioFLRCBandwidths_t bw, SX1280_RadioFLRCCodingRates_t cr, SX1280_RadioFLRCBTFilter_t bt);
     void SetPacketParams(uint8_t PreambleLength, SX1280_RadioLoRaPacketLengthsModes_t HeaderType, uint8_t PayloadLength, SX1280_RadioLoRaCrcModes_t crc, SX1280_RadioLoRaIQModes_t InvertIQ);
     void ICACHE_RAM_ATTR SetFrequency(uint32_t freq);
     void ICACHE_RAM_ATTR SetFIFOaddr(uint8_t txBaseAddr, uint8_t rxBaseAddr);
@@ -116,7 +123,4 @@ public:
     int8_t ICACHE_RAM_ATTR GetLastPacketRSSI();
     int8_t ICACHE_RAM_ATTR GetLastPacketSNR();
     static uint16_t ICACHE_RAM_ATTR GetIrqStatus();
-
-
-private:
 };

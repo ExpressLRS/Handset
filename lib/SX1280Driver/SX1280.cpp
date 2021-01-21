@@ -9,6 +9,7 @@ extern "C" {
 #include "../../include/systick.h"
 }
 #include "../../src/utils.h"
+#include "../../src/config.h"
 
 #include <stdio.h>
 #include <math.h>
@@ -63,23 +64,24 @@ void SX1280Driver::End()
     instance->RXdoneCallback = &nullCallback;
 }
 
-void SX1280Driver::Begin()
+// flrc specific setup
+void SX1280Driver::setupFLRC()
 {
-    hal.init();
-    // hal.TXdoneCallback = &SX1280Driver::TXnbISR;
-    // hal.RXdoneCallback = &SX1280Driver::RXnbISR;
+    this->SetMode(SX1280_MODE_STDBY_RC);                                    //step 1 put in STDBY_RC mode
+    hal.WriteCommand(SX1280_RADIO_SET_PACKETTYPE, SX1280_PACKET_TYPE_FLRC); //Step 2: set packet type
+    // this->ConfigModParamsFLRC(FLRC_BR_0_325_BW_0_3, FLRC_CR_1_2, BT_DIS);   //Step 5: Configure Modulation Params
+    this->ConfigModParamsFLRC(FLRC_BR_1_300_BW_1_2, FLRC_CR_1_2, BT_DIS);   //Step 5: Configure Modulation Params
+    hal.WriteCommand(SX1280_RADIO_SET_AUTOFS, 0x01);                        //enable auto FS
 
+    // setpacketparams for flrc mode
+    SetPacketParamsFLRC();
 
-    printf("reset\n\r");
-    hal.reset();
+    // setup the syncword - currently have it disabled in void SetPacketParamsFLRC, anything needed here?
+}
 
-    // expected value is 43447 (A9B7)
-    uint16_t firmwareRev = (((hal.ReadRegister(REG_LR_FIRMWARE_VERSION_MSB)) << 8) | (hal.ReadRegister(REG_LR_FIRMWARE_VERSION_MSB + 1)));
-    printf("Firmware Revision: %u (%X)\n\r", firmwareRev, firmwareRev);
-    if (firmwareRev != 0xA9B7) {
-        printf("WARNING: firmware not the expected value of 0xA9B7\n\r");
-    }
-
+// lora specific setup
+void SX1280Driver::setupLora()
+{
     this->SetMode(SX1280_MODE_STDBY_RC);                                    //step 1 put in STDBY_RC mode
     hal.WriteCommand(SX1280_RADIO_SET_PACKETTYPE, SX1280_PACKET_TYPE_LORA); //Step 2: set packet type to LoRa
     this->ConfigModParams(currBW, currSF, currCR);                          //Step 5: Configure Modulation Params
@@ -89,11 +91,44 @@ void SX1280Driver::Begin()
     #else
     this->SetPacketParams(12, SX1280_LORA_PACKET_IMPLICIT, 8, SX1280_LORA_CRC_OFF, SX1280_LORA_IQ_NORMAL);
     #endif
+}
+
+void SX1280Driver::Begin()
+{
+    hal.init();
+    // hal.TXdoneCallback = &SX1280Driver::TXnbISR;
+    // hal.RXdoneCallback = &SX1280Driver::RXnbISR;
+
+    printf("reset\n\r");
+    hal.reset();
+
+    // expected value is 43447 (A9B7) (TODO add list of other good values as we see them)
+    uint16_t firmwareRev = (((hal.ReadRegister(REG_LR_FIRMWARE_VERSION_MSB)) << 8) | (hal.ReadRegister(REG_LR_FIRMWARE_VERSION_MSB + 1)));
+    printf("Firmware Revision: %u (%X)\n\r", firmwareRev, firmwareRev);
+    if (firmwareRev != 0xA9B7) {
+        printf("WARNING: firmware not the expected value of 0xA9B7\n\r");
+    }
+
+    #ifdef USE_FLRC
+    setupFLRC();
+    #else
+    setupLora();
+    #endif // USE_FLRC
+
     this->SetFrequency(this->currFreq); //Step 3: Set Freq
     this->SetFIFOaddr(0x00, 0x00);      //Step 4: Config FIFO addr
+
     // Using dual dios for rx and tx done
     this->SetDioIrqParams(SX1280_IRQ_RADIO_ALL, SX1280_IRQ_RX_DONE, SX1280_IRQ_TX_DONE, SX1280_IRQ_RADIO_NONE);
 }
+
+
+void ICACHE_RAM_ATTR SX1280Driver::ConfigFLRC(uint32_t freq)
+{
+    this->setupFLRC();
+    SetFrequency(freq);
+}
+
 
 void ICACHE_RAM_ATTR SX1280Driver::Config(SX1280_RadioLoRaBandwidths_t bw, SX1280_RadioLoRaSpreadingFactors_t sf, 
                                             SX1280_RadioLoRaCodingRates_t cr, uint32_t freq, uint8_t PreambleLength)
@@ -109,16 +144,24 @@ void ICACHE_RAM_ATTR SX1280Driver::Config(SX1280_RadioLoRaBandwidths_t bw, SX128
     SetFrequency(freq);
 }
 
-// TODO - make subclasses of sx1280 for each radio module that provide implementations of this method
+// TODO - make subclasses of sx1280 that provide implementations of this method for each radio module 
+// TODO = should this return a float for low power modules?
 uint16_t ICACHE_RAM_ATTR SX1280Driver::getPowerMw()
 {
-    // for e28-20, PA output is +22dBm of the pre-PA setting, up to a max of -2 input.
     // convert from dBm to mW
-    // uint16_t mw = pow10(float(currPWR+22)/10.0f);
-
+    #if defined(RADIO_E28_27)
     // for e28-27, PA output is +27dBm of the pre-PA setting, up to a max of 0 input.
-    // convert from dBm to mW
     uint16_t mw = pow10(float(currPWR+27)/10.0f);
+    #elif defined(RADIO_E28_20)
+    // for e28-20, PA output is +22dBm of the pre-PA setting, up to a max of -2 input.
+    uint16_t mw = pow10(float(currPWR+22)/10.0f);
+    #elif defined(RADIO_E28_12)
+    // for e28-12 output is just the current setting
+    uint16_t mw = pow10(float(currPWR)/10.0f) + 0.5; // round to nearest
+    #else
+    #error("must define a radio module")
+    #endif
+
     return mw;
 }
 
@@ -153,22 +196,49 @@ void ICACHE_RAM_ATTR SX1280Driver::SetOutputPower(int8_t power)
     return;
 }
 
-// TODO use a bigger buffer and pass the command in [0] so we don't have to copy the whole buffer again.
+
 void SX1280Driver::SetPacketParams(uint8_t PreambleLength, SX1280_RadioLoRaPacketLengthsModes_t HeaderType, uint8_t PayloadLength, 
                                     SX1280_RadioLoRaCrcModes_t crc, SX1280_RadioLoRaIQModes_t InvertIQ)
 {
-    uint8_t buf[7];
+    uint8_t buf[8];
 
-    buf[0] = PreambleLength;
-    buf[1] = HeaderType;
-    buf[2] = PayloadLength;
-    buf[3] = crc;
-    buf[4] = InvertIQ;
-    buf[5] = 0x00;
+    buf[0] = SX1280_RADIO_SET_PACKETPARAMS;
+    buf[1] = PreambleLength;
+    buf[2] = HeaderType;
+    buf[3] = PayloadLength;
+    buf[4] = crc;
+    buf[5] = InvertIQ;
     buf[6] = 0x00;
+    buf[7] = 0x00;
 
-    hal.WriteCommand(SX1280_RADIO_SET_PACKETPARAMS, buf, sizeof(buf));
+    hal.fastWriteCommand(buf, sizeof(buf));
 }
+
+/**
+* packetParam1 = AGCPreambleLength
+• packetParam2 = SyncWordLength
+• packetParam3 = SyncWordMatch
+• packetParam4 = PacketType
+• packetParam5 = PayloadLength
+• packetParam6 = CrcLength
+• packetParam7 = Whitening
+ */
+void SX1280Driver::SetPacketParamsFLRC()
+{
+    uint8_t buf[8];
+
+    buf[0] = SX1280_RADIO_SET_PACKETPARAMS;
+    buf[1] = 0x30;  // PREAMBLE_LENGTH_16_BITS 0x30
+    buf[2] = 0x00;  // SyncWordLength FLRC_SYNC_NOSYNC 0x00
+    buf[3] = 0x00;  // SyncWordMatch RX_DISABLE_SYNC_WORD 0x00
+    buf[4] = 0x00;  // PacketType PACKET_FIXED_LENGTH 0x00
+    buf[5] = 8;     // PayloadLength
+    buf[6] = 0x10;  // CrcLength Docs are contradictory, this may be 2 bytes: CRC_1_BYTE 0x10
+    buf[7] = 0x08;  // 0x08 Whitening must be disabled for FLRC
+
+    hal.fastWriteCommand(buf, sizeof(buf));
+}
+
 
 void SX1280Driver::SetMode(SX1280_RadioOperatingModes_t OPmode)
 {
@@ -234,6 +304,8 @@ void setHighSensitivity()
     hal.WriteRegister(0x0891, (hal.ReadRegister(0x0891) | 0xC0));
 }
 
+// XXX generalise to handle flrc or copy and specialise?
+
 void SX1280Driver::ConfigModParams(SX1280_RadioLoRaBandwidths_t bw, SX1280_RadioLoRaSpreadingFactors_t sf, SX1280_RadioLoRaCodingRates_t cr)
 {
     // Care must therefore be taken to ensure that modulation parameters are set using the command
@@ -267,6 +339,23 @@ void SX1280Driver::ConfigModParams(SX1280_RadioLoRaBandwidths_t bw, SX1280_Radio
 
     setHighSensitivity();
 }
+
+void SX1280Driver::ConfigModParamsFLRC(SX1280_RadioFLRCBandwidths_t bw, SX1280_RadioFLRCCodingRates_t cr, SX1280_RadioFLRCBTFilter_t bt)
+{
+    // Care must therefore be taken to ensure that modulation parameters are set using the command
+    // SetModulationParam() only after defining the packet type SetPacketType() to be used
+
+    uint8_t rfparams[3]; //TODO make word aligned
+
+    rfparams[0] = (uint8_t)bw;
+    rfparams[1] = (uint8_t)cr;
+    rfparams[2] = (uint8_t)bt;
+
+    hal.WriteCommand(SX1280_RADIO_SET_MODULATIONPARAMS, rfparams, sizeof(rfparams));
+
+    setHighSensitivity();
+}
+
 
 void SX1280Driver::SetFrequency(uint32_t Reqfreq)
 {
@@ -352,6 +441,8 @@ void SX1280Driver::ClearIrqStatus(uint16_t irqMask)
 //     //instance->GetStatus();
 //     instance->TXdoneCallback();
 // }
+
+// TODO - how does the syncword get set on TX?
 
 void SX1280Driver::TXnb(volatile uint8_t *data, uint8_t length)
 {

@@ -104,7 +104,7 @@ typedef struct expresslrs_mod_settings_s
 #endif
 
 #if defined(Regulatory_Domain_ISM_2400) || defined(Regulatory_Domain_ISM_2400_NA)
-#define RATE_MAX 5  // actually the number of rates, so the max value is RATE_MAX-1
+#define RATE_MAX 6  // actually the number of rates, so the max value is RATE_MAX-1
 #define RATE_DEFAULT 2
 typedef struct expresslrs_mod_settings_s
 {

@@ -1,6 +1,6 @@
 #include "config.h"
 
-#ifdef T_DISPLAY
+#if defined(T_DISPLAY) || defined(PCB_V1_0)
 
 #include "lcd-tdisplay/lcd.h"
 #include "lcd-tdisplay/oledfont.h"

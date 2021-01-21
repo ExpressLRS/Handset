@@ -90,6 +90,19 @@ void SX1280Hal::WriteCommand(SX1280_RadioCommands_t command, uint8_t *buffer, ui
     spi1_transferBytes(OutBuffer, size+1);
 }
 
+/** faster version of Writecommand.
+ * The command is passed in the first byte of buffer
+ * size includes the command
+ * contents of buffer will be overwritten
+*/
+void SX1280Hal::fastWriteCommand(uint8_t *buffer, uint8_t size)
+{
+    WaitOnBusy();
+
+    spi1_transferBytes(buffer, size);
+}
+
+
 // TODO add fast read without the memory copying
 void SX1280Hal::ReadCommand(SX1280_RadioCommands_t command, uint8_t *buffer, uint8_t size)
 {
@@ -189,26 +202,18 @@ void  SX1280Hal::WriteBuffer(uint8_t offset, volatile uint8_t *buffer, uint8_t s
 void  SX1280Hal::ReadBuffer(uint8_t offset, volatile uint8_t *buffer, uint8_t size)
 {
     uint8_t OutBuffer[size + 3];
-    // uint8_t localbuf[size];
 
     OutBuffer[0] = SX1280_RADIO_READ_BUFFER;
     OutBuffer[1] = offset;
     OutBuffer[2] = 0x00;
-    // memcpy(OutBuffer + 3, localbuf, size);
-    memset(OutBuffer + 3, 0, size);
+
+    memset(OutBuffer + 3, 0, size); // XXX is this needed?
 
     WaitOnBusy();
-    // digitalWrite(GPIO_PIN_NSS, LOW);
 
     spi1_transferBytes(OutBuffer, uint8_t(sizeof(OutBuffer)));
-    // digitalWrite(GPIO_PIN_NSS, HIGH);
 
     memcpy((void *)buffer, OutBuffer + 3, size);
-
-    // for (int i = 0; i < size; i++) // todo check if this is the right wany to handle volatiles
-    // {
-    //     buffer[i] = localbuf[i];
-    // }
 }
 
 /** Wait for the SX1280 busy flag to be low

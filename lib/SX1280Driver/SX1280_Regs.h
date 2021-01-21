@@ -142,7 +142,7 @@ typedef enum
 } SX1280_RadioLoRaSpreadingFactors_t;
 
 /*!
- * \brief Represents the bandwidth values for LORA packet type
+ * \brief Represents the bandwidth values for the LORA packet type
  */
 typedef enum
 {
@@ -152,8 +152,16 @@ typedef enum
     SX1280_LORA_BW_1600 = 0x0A,
 } SX1280_RadioLoRaBandwidths_t;
 
+typedef enum
+{
+    FLRC_BR_0_260_BW_0_3 = 0xEB,
+    FLRC_BR_0_325_BW_0_3 = 0xC7,
+    FLRC_BR_0_650_BW_0_6 = 0x86,
+    FLRC_BR_1_300_BW_1_2 = 0x45
+} SX1280_RadioFLRCBandwidths_t;
+
 /*!
- * \brief Represents the coding rate values for LORA packet type
+ * \brief Represents the coding rate values for the LORA packet type
  */
 typedef enum
 {
@@ -165,6 +173,19 @@ typedef enum
     SX1280_LORA_CR_LI_4_6 = 0x06,
     SX1280_LORA_CR_LI_4_7 = 0x07,
 } SX1280_RadioLoRaCodingRates_t;
+
+typedef enum
+{
+    FLRC_CR_1_2 = 0x00
+
+} SX1280_RadioFLRCCodingRates_t;
+
+// FLRC bluetooth filter setting
+typedef enum
+{
+    BT_DIS = 0x00
+} SX1280_RadioFLRCBTFilter_t;
+
 
 typedef enum
 {
