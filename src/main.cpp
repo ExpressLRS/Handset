@@ -372,32 +372,47 @@ void beep(uint32_t duration)
  * 
  * @param interval the delay between beeps in ms
  * @param duration the length of each beep in ms
+ * @param currentTime approximate current time in ms
  * 
  * duration should be less than interval. duration of 0 disables beeping
  * 
+ * Passes the current time as a param as the call to millis() is quite expensive
+ * and we already have a recent value in the caller.
+ * 
  */
-bool handleBeeps(uint16_t interval, uint16_t duration)
+bool handleBeeps(uint16_t interval, uint16_t duration, uint32_t currentTime)
 {
+   // Static variables to track state across calls
    static uint32_t beepStartTime = 0;
+   static bool beeperActive = false;
 
    if (duration == 0) {
       // make sure the beeper is off
-      gpio_bit_reset(PORT(GPIO_BUZZER), PIN(GPIO_BUZZER));
+      if (beeperActive) {
+         gpio_bit_reset(PORT(GPIO_BUZZER), PIN(GPIO_BUZZER));
+         beeperActive = false;
+      }
       return false;
    }
 
-   uint32_t now = millis();
+   // uint32_t now = millis();
 
-   if (now > (beepStartTime + interval)) {
-      // start the beeper
-      beepStartTime = now;
-      gpio_bit_set(PORT(GPIO_BUZZER), PIN(GPIO_BUZZER));
+   if (currentTime > (beepStartTime + interval)) {
+      if (!beeperActive) {
+         // start the beeper
+         beepStartTime = currentTime;
+         gpio_bit_set(PORT(GPIO_BUZZER), PIN(GPIO_BUZZER));
+         beeperActive = true;
+      }
       return true;
    }
 
-   if (now > (beepStartTime + duration)) {
-      // stop the beeper
-      gpio_bit_reset(PORT(GPIO_BUZZER), PIN(GPIO_BUZZER));
+   if (currentTime > (beepStartTime + duration)) {
+      if (beeperActive) {
+         // stop the beeper
+         gpio_bit_reset(PORT(GPIO_BUZZER), PIN(GPIO_BUZZER));
+         beeperActive = false;
+      }
       return false;
    }
 
@@ -1808,8 +1823,9 @@ int main(void)
       // }
 
       // provide warning beeps if the battery is getting low
-      uint16_t duration = batteryLow ? 25 : 0;
-      handleBeeps(5000, duration);
+      const uint16_t duration = batteryLow ? 25 : 0;
+      const uint16_t interval = 5000;
+      handleBeeps(interval, duration, now);
 
       loopCounter++;
    } // event loop
