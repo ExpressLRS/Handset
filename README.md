@@ -1,6 +1,8 @@
 # Express_CX
 Firmware for an experimental handset based on ExpressLRS
 
+You're welcome to look around, but the project is still very much a work in progress and isn't particularly consumable yet. It's purpose is to test the limits of current RC technology and is likely only of interest to a very small subset of pilots.
+
 This project builds on the awesome ExpressLRS high performance RC link https://github.com/AlessandroAU/ExpressLRS
 
 The idea is to try and provide the highest quality RC data to the flight controller, building on the low latency, low jitter capabilities of ExpressLRS. The primary target is quadcopters running BetaFlight - this is not intended to be a general purpose RC controller.
