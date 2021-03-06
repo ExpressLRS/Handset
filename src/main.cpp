@@ -13,7 +13,23 @@
 //    Stick calibration
 //    Auto power limit when disarmed - or full dynamic power?
 
+//    msp for vtx channel?
+   // Info from BF msp.c:
+   // uint16_t newFrequency = sbufReadU16(src);
+   // if (newFrequency <= VTXCOMMON_MSP_BANDCHAN_CHKVAL) {  // Value is band and channel
+   //     const uint8_t newBand = (newFrequency / 8) + 1;
+   //     const uint8_t newChannel = (newFrequency % 8) + 1;
+//
+
+// Prevents some debug print statements when uncommented
 // #define DEBUG_SUPPRESS
+
+// Uncomment to enable some debug output on the LCD
+// #define DEBUG_STATUS
+
+// uncomment for setting up the gimbals
+// #define STICK_CALIBRATION
+
 
 extern "C" {
 
@@ -71,6 +87,7 @@ uint8_t nextSwitchIndex = 0; // for round-robin sequential switches
 extern "C" {
    void SendRCdataToRF();
    void HandleTLM();
+   void HandleFHSS();
    void ProcessTLMpacket();
 }
 
@@ -186,6 +203,11 @@ SX1280Driver radio;
 int8_t rssi;
 uint8_t snr, lq;
 
+#include "crc.h"
+
+GENERIC_CRC8 ota_crc(ELRS_CRC_POLY);
+
+
 
 // ======== Interrupt Handlers ============
 
@@ -207,6 +229,12 @@ void TIMER2_IRQHandler(void)
       tLast = now;
 
       NonceTX++; // New - just increment the nonce on every frame
+
+      #ifdef ELRS_OG_COMPATIBILITY
+      HandleFHSS(); // experimental - can we do fhss here?
+      #else
+      // fhss is in txdone
+      #endif
 
       SendRCdataToRF();
    }
@@ -231,25 +259,34 @@ void DMA0_Channel0_IRQHandler(void)
       dma_interrupt_flag_clear(DMA0, DMA_CH0, DMA_INT_FLAG_FTF);
 
       // TODO define some constants in config.h for indexing instead of using an ifdef here
-      #ifdef PCB_V1_0
+      #if defined(PROTOTYPE_V5)
 
-      // current: Y(0) T(1) P(3) R(2)
+      // V4: Y(1) T(0) P(2) R(3)
+
+      aud_roll.update(adc_value[3]);
+      aud_pitch.update(adc_value[2]);
+      aud_throttle.update(adc_value[0]);
+      aud_yaw.update(adc_value[1]);
+
+      #elif defined(PROTOTYPE_V4)
+
+      // V4: Y(0) T(1) P(3) R(2)
 
       aud_roll.update(adc_value[2]);
       aud_pitch.update(adc_value[3]);
       aud_throttle.update(adc_value[1]);
       aud_yaw.update(adc_value[0]);
 
-      #else
+      #elif defined(PROTOTYPE_V3)
 
-      // current: Y(0) T(1) P(2) R(3)
+      // V3: Y(0) T(1) P(2) R(3)
 
       aud_roll.update(adc_value[3]);
       aud_pitch.update(adc_value[2]);
       aud_throttle.update(adc_value[1]);
       aud_yaw.update(adc_value[0]);
 
-      #endif // PCB_V1_0
+      #endif // adc mapping
 
       nSamples++;
       now = micros();
@@ -273,22 +310,33 @@ void EXTI10_15_IRQHandler(void)
 
 void HandleFHSS()
 {
-  uint8_t modresult = (NonceTX + 1) % ExpressLRS_currAirRate_Modparams->FHSShopInterval;
+   #ifdef ELRS_OG_COMPATIBILITY
+   uint8_t modresult = (NonceTX+1) % ExpressLRS_currAirRate_Modparams->FHSShopInterval;
+   #else
+   uint8_t modresult = (NonceTX + 1) % ExpressLRS_currAirRate_Modparams->FHSShopInterval;
+   #endif // ELRS_OG_COMPATIBILITY
 
-  if (modresult == 0) // if it time to hop, do so.
-  {
-    radio.SetFrequency(FHSSgetNextFreq());
-  }
+
+   if (modresult == 0) // if it time to hop, do so.
+   {
+      uint32_t f = FHSSgetNextFreq();
+      // printf("f %lu\n\r", f);
+      radio.SetFrequency(f);
+   }
 }
 
 void TXdoneISR()
 {
    // printf("TXdone!\n\r");
 
+   // TODO do fhss from timer for both cases
+   #ifdef ELRS_OG_COMPATIBILITY
+   // fhss moved to timer
+   #else
    HandleFHSS();
-   HandleTLM();
+   #endif
 
-   // RadioIsIdle = true;
+   HandleTLM();
 }
 
 
@@ -357,9 +405,11 @@ uint32_t PORT(uint32_t compositeGPIOid) {
  */
 void beep(uint32_t duration)
 {
+   #ifdef GPIO_BUZZER
    gpio_bit_set(PORT(GPIO_BUZZER), PIN(GPIO_BUZZER));
    delay(duration);
    gpio_bit_reset(PORT(GPIO_BUZZER), PIN(GPIO_BUZZER));
+   #endif
 }
 
 
@@ -374,6 +424,8 @@ void beep(uint32_t duration)
  * @param duration the length of each beep in ms
  * @param currentTime approximate current time in ms
  * 
+ * @return true if beeping, false if quiet. Is it useful?
+ * 
  * duration should be less than interval. duration of 0 disables beeping
  * 
  * Passes the current time as a param as the call to millis() is quite expensive
@@ -382,6 +434,7 @@ void beep(uint32_t duration)
  */
 bool handleBeeps(uint16_t interval, uint16_t duration, uint32_t currentTime)
 {
+   #ifdef GPIO_BUZZER
    // Static variables to track state across calls
    static uint32_t beepStartTime = 0;
    static bool beeperActive = false;
@@ -415,6 +468,7 @@ bool handleBeeps(uint16_t interval, uint16_t duration, uint32_t currentTime)
       }
       return false;
    }
+   #endif // GPIO_BUZZER
 
    return false;
 }
@@ -484,8 +538,13 @@ void setSentSwitch(uint8_t index, uint8_t value)
 
 void ProcessTLMpacket()
 {
-   //   printf("TLMpacket\n\r");
+   printf("TLMpacket\n\r");
+   #ifdef ELRS_OG_COMPATIBILITY
+   uint8_t calculatedCRC = ota_crc.calc(radio.RXdataBuffer, 7) + CRCCaesarCipher;
+   #else // not ELRS_OG_COMPATIBILITY
    uint8_t calculatedCRC = CalcCRC(radio.RXdataBuffer, 7) + CRCCaesarCipher;
+   #endif // ELRS_OG_COMPATIBILITY
+
    uint8_t inCRC = radio.RXdataBuffer[7];
    if ((inCRC != calculatedCRC))
    {
@@ -528,22 +587,42 @@ void ProcessTLMpacket()
    }
 }
 
+bool nextFrameIsTelemetry()
+{
+   #ifdef ELRS_OG_COMPATIBILITY
+   uint8_t modresult = (NonceTX+2) % TLMratioEnumToValue(ExpressLRS_currAirRate_Modparams->TLMinterval);
+   #else
+   // use nonce+1 because we're getting ready for the next frame
+   uint8_t modresult = (NonceTX + 1) % TLMratioEnumToValue(ExpressLRS_currAirRate_Modparams->TLMinterval);
+   #endif // ELRS_OG_COMPATIBILITY
+
+   return modresult == 0;
+}
+
+bool thisFrameIsTelemetry()
+{
+   #ifdef ELRS_OG_COMPATIBILITY
+   uint8_t modresult = (NonceTX+1) % TLMratioEnumToValue(ExpressLRS_currAirRate_Modparams->TLMinterval);
+   #else
+   // use nonce+1 because we're getting ready for the next frame
+   uint8_t modresult = (NonceTX) % TLMratioEnumToValue(ExpressLRS_currAirRate_Modparams->TLMinterval);
+   #endif // ELRS_OG_COMPATIBILITY
+
+   return modresult == 0;
+}
+
+
 void HandleTLM()
 {
    if (ExpressLRS_currAirRate_Modparams->TLMinterval > 0)
    {
-      // use nonce+1 because we're getting ready for the next frame
-      uint8_t modresult = (NonceTX + 1) % TLMratioEnumToValue(ExpressLRS_currAirRate_Modparams->TLMinterval);
-      if (modresult != 0)
-      {
-         // not time yet, so return
-         return;
+      if (nextFrameIsTelemetry()) {
+         // receive tlm response because it's time
+         //  printf("starting rx\n\r");
+         // gpio_bit_set(LED_GPIO_PORT, LED_PIN); // for debugging, set the led pin high when listening
+         radio.RXnb();
+         // WaitRXresponse = true;
       }
-      // receive tlm response because it's time
-      //  printf("starting rx\n\r");
-      // gpio_bit_set(LED_GPIO_PORT, LED_PIN); // for debugging, set the led pin high when listening
-      radio.RXnb();
-      // WaitRXresponse = true;
    }
 }
 
@@ -568,9 +647,25 @@ void GenerateSyncPacketData()
    uint8_t PacketHeaderAddr;
    PacketHeaderAddr = (DeviceAddr << 2) + SYNC_PACKET;
    radio.TXdataBuffer[0] = PacketHeaderAddr;
-   radio.TXdataBuffer[1] = FHSSgetCurrIndex();
+   uint8_t fhssIndex = FHSSgetCurrIndex();
+   printf("fhss %u\n\r", fhssIndex);
+   radio.TXdataBuffer[1] = fhssIndex;
+
+   #ifdef ELRS_OG_COMPATIBILITY
+   radio.TXdataBuffer[2] = NonceTX+1;
+   #else
    radio.TXdataBuffer[2] = NonceTX;
+   #endif //ELRS_OG_COMPATIBILITY
+
+   #ifdef ELRS_OG_COMPATIBILITY
+   uint8_t SwitchEncMode = 0b01; // handset only supports hybrid8, so this is the only possible value
+   uint8_t Index = (ExpressLRS_currAirRate_Modparams->index & 0b11);
+   uint8_t TLMrate = (ExpressLRS_currAirRate_Modparams->TLMinterval & 0b111);
+   radio.TXdataBuffer[3] = (Index << 6) + (TLMrate << 3) + (SwitchEncMode << 1);
+   #else // not ELRS_OG_COMPATIBILITY
    radio.TXdataBuffer[3] = ((ExpressLRS_currAirRate_Modparams->index & 0b111) << 5) + ((ExpressLRS_currAirRate_Modparams->TLMinterval & 0b111) << 2);
+   #endif // ELRS_OG_COMPATIBILITY
+
    radio.TXdataBuffer[4] = UID[3];
    radio.TXdataBuffer[5] = UID[4];
    radio.TXdataBuffer[6] = UID[5];
@@ -1094,10 +1189,11 @@ uint32_t scaleRollData(uint16_t raw_adc_roll)
 
 void ICACHE_RAM_ATTR SendRCdataToRF()
 {
+   // printf("n %u\n\r", NonceTX);
    /////// This Part Handles the Telemetry Response ///////
-   if (((uint8_t)ExpressLRS_currAirRate_Modparams->TLMinterval > 0) &&
-       ((NonceTX) % TLMratioEnumToValue(ExpressLRS_currAirRate_Modparams->TLMinterval) == 0))
+   if (((uint8_t)ExpressLRS_currAirRate_Modparams->TLMinterval > 0) && thisFrameIsTelemetry())
    { // This frame is for telem, so don't attempt to transmit
+      printf("t skip\n\r");
       return;
    }
 
@@ -1151,7 +1247,6 @@ void ICACHE_RAM_ATTR SendRCdataToRF()
 
       // TODO make this a runtime mode that displays on the lcd
       // TODO auto calibration mode
-      // #define STICK_CALIBRATION
       #ifdef STICK_CALIBRATION
       static uint32_t lastCalib = 0;
       if (millis() > (lastCalib + 1000))
@@ -1200,7 +1295,18 @@ void ICACHE_RAM_ATTR SendRCdataToRF()
    }
 
    ///// Next, Calculate the CRC and put it into the buffer /////
+
+   #ifdef ELRS_OG_COMPATIBILITY
+
+   // TODO - make this the default for all cases
+   uint8_t crc = ota_crc.calc(radio.TXdataBuffer, 7) + CRCCaesarCipher;
+
+   #else // not ELRS_OG_COMPATIBILITY
+
    uint8_t crc = CalcCRC(radio.TXdataBuffer, 7) + CRCCaesarCipher;
+
+   #endif // ELRS_OG_COMPATIBILITY
+
    radio.TXdataBuffer[7] = crc;
    
 
@@ -1273,7 +1379,9 @@ void updateDisplayNormal()
    // filterTime = 0;
    // nSamples = 0;
 
+   #ifndef DEBUG_SUPPRESS
    printf("%d %u %u\n\r", rssi, snr, lq);
+   #endif
 
    // Power
    // Packet Rate
@@ -1356,6 +1464,7 @@ void updateDisplayNormal()
       BACK_COLOR = DARKBLUE;
    } // battery ADC ready to read
 
+   #ifdef DEBUG_STATUS
    // get the current status of the switches
    uint32_t newSWA = getSwitchState(SWA_HIGH, SWA_LOW);
    uint32_t newSWB = getSwitchState(SWB_HIGH, SWB_LOW);
@@ -1375,6 +1484,7 @@ void updateDisplayNormal()
    sprintf((char*)buffer, "loops %8lu", loopCounter);
    LCD_ShowString(0, 192, buffer, WHITE);
    loopCounter = 0;
+   #endif // DEBUG_STATUS
 
    #endif // T_DISPLAY
 }

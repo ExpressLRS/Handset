@@ -2,6 +2,8 @@
 
 #include "FHSS.h"
 
+#include "config.h"
+
 #if defined(Regulatory_Domain_AU_915) || defined(Regulatory_Domain_EU_868) || defined(Regulatory_Domain_FCC_915) || defined(Regulatory_Domain_AU_433) || defined(Regulatory_Domain_EU_433)
 #include "SX127xDriver.h"
 #endif
@@ -57,6 +59,20 @@ typedef enum
     RF_AIRMODE_PARAMETERS = 2
 } expresslrs_tlm_header_e;
 
+#ifdef ELRS_OG_COMPATIBILITY
+typedef enum
+{
+    RATE_500HZ = 0,
+    RATE_250HZ = 1,
+    RATE_200HZ = 2,
+    RATE_150HZ = 3,
+    RATE_100HZ = 4,
+    RATE_50HZ = 5,
+    RATE_25HZ = 6,
+    RATE_4HZ = 7,
+    RATE_ENUM_MAX = 8
+} expresslrs_RFrates_e; // Max value of 16 since only 4 bits have been assigned in the sync package.
+#else
 typedef enum
 {
     RATE_1KHZ  = 0,
@@ -70,6 +86,7 @@ typedef enum
     RATE_25HZ = 8,
     RATE_4HZ = 9
 } expresslrs_RFrates_e; // Max value of 16 since only 4 bits have been assigned in the sync package.
+#endif // ELRS_OG_COMPATIBILITY
 
 typedef struct expresslrs_rf_pref_params_s
 {
@@ -104,8 +121,15 @@ typedef struct expresslrs_mod_settings_s
 #endif
 
 #if defined(Regulatory_Domain_ISM_2400) || defined(Regulatory_Domain_ISM_2400_NA)
+
+#ifdef ELRS_OG_COMPATIBILITY
+#define RATE_MAX 4  // actually the number of rates, so the max value is RATE_MAX-1
+#define RATE_DEFAULT 0
+#else
 #define RATE_MAX 6  // actually the number of rates, so the max value is RATE_MAX-1
 #define RATE_DEFAULT 2
+#endif // ELRS_OG_COMPATIBILITY
+
 typedef struct expresslrs_mod_settings_s
 {
     uint8_t index;
@@ -120,7 +144,7 @@ typedef struct expresslrs_mod_settings_s
 
 } expresslrs_mod_settings_t;
 
-#endif
+#endif // defined(Regulatory_Domain_ISM_2400) || defined(Regulatory_Domain_ISM_2400_NA)
 
 expresslrs_mod_settings_s *get_elrs_airRateConfig(int8_t index);
 expresslrs_rf_pref_params_s *get_elrs_RFperfParams(int8_t index);
@@ -133,3 +157,6 @@ extern expresslrs_rf_pref_params_s *ExpressLRS_currAirRate_RFperfParams;
 //extern expresslrs_mod_settings_s *ExpressLRS_prevAirRate;
 
 extern bool ExpressLRS_AirRateNeedsUpdate;
+
+//ELRS SPECIFIC OTA CRC 
+#define ELRS_CRC_POLY 0x83

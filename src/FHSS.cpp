@@ -2,8 +2,11 @@
 #include "Serial.h"
 #include <stdlib.h>
 
-uint8_t volatile FHSSptr = 0;
-uint8_t FHSSsequence[256] = {0};
+uint8_t volatile FHSSptr = 0; // XXX must be 8 bit unsigned to wrap when incremented,
+#if (NR_SEQUENCE_ENTRIES != 256)
+#error "hop sequence table must be 256 entries"
+#endif
+uint8_t FHSSsequence[NR_SEQUENCE_ENTRIES] = {0};
 
 //uint8_t NumOfFHSSfrequencies = 20;
 int32_t FreqCorrection = 0;
@@ -30,7 +33,7 @@ uint32_t ICACHE_RAM_ATTR FHSSgetCurrFreq()
 
 uint32_t ICACHE_RAM_ATTR FHSSgetNextFreq()
 {
-    FHSSptr++;
+    FHSSptr++;  // as long as FHSSptr is uint8 it will wrap without extra code
     return FHSSgetCurrFreq();
 }
 

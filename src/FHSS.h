@@ -293,6 +293,7 @@ const uint32_t FHSSfreqs[] = {
 // The number of FHSS frequencies in the table
 #define NR_FHSS_ENTRIES (sizeof(FHSSfreqs) / sizeof(uint32_t))
 
+// XXX We rely on this being 256 to match the wrap on an 8 bit index
 #define NR_SEQUENCE_ENTRIES 256
 extern uint8_t FHSSsequence[NR_SEQUENCE_ENTRIES];
 

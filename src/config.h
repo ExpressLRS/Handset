@@ -1,14 +1,26 @@
+#pragma once
+
 
 // which board are we using
 
-// #define LONGAN_NANO
+#define LONGAN_NANO
 // #define T_DISPLAY
-#define PCB_V1_0
+// #define PCB_V1_0
+
+// some things are specific to each build
+
+// #define PROTOTYPE_V3
+// #define PROTOTYPE_V4
+#define PROTOTYPE_V5
+
+// testing compat mode with mainstream elrs rx
+// TODO make dynamic
+#define ELRS_OG_COMPATIBILITY
 
 // TODO make this runtime dynamic
 // define the type of radio module being used 
 
-#define RADIO_E28_12
+#define RADIO_E28_12    // CAREFUL - this will break _20 and _27 if you use it by accident
 // #define RADIO_E28_20
 // #define RADIO_E28_27
 
@@ -109,8 +121,11 @@ enum ports {
 
 
 // rotary encoder button
-#define RE_BUTTON_PORT GPIOA
-#define RE_BUTTON_PIN GPIO_PIN_4
+// #define RE_BUTTON_PORT GPIOA
+// #define RE_BUTTON_PIN GPIO_PIN_4
+
+#define RE_BUTTON_PORT GPIOC
+#define RE_BUTTON_PIN GPIO_PIN_13
 
 // for testing on the nano
 // #define SWB_TMP PA14
@@ -119,13 +134,33 @@ enum ports {
 #define SWA_HIGH PC14
 
 #define SWB_LOW  PA13
-#define SWB_HIGH PA14   // PA14 is stuck low, need to add a pullup of 4k7 or a little more
+#define SWB_HIGH PA14
 
 #define SWC_LOW PA15
 #define SWC_HIGH PB3
 
 #define SWD_LOW  PB5
 #define SWD_HIGH PB4
+
+// need adc scaling constants even if we don't have anything connected
+#define ADC_PITCH_REVERSED false
+#define ADC_PITCH_MIN 726u
+#define ADC_PITCH_CTR 2080u
+#define ADC_PITCH_MAX 3497u
+
+#define ADC_ROLL_REVERSED true
+#define ADC_ROLL_MIN 592u
+#define ADC_ROLL_CTR 2083u
+#define ADC_ROLL_MAX 3547u
+
+#define ADC_THROTTLE_REVERSED true
+#define ADC_THROTTLE_MIN 561u
+#define ADC_THROTTLE_MAX 3504u
+
+#define ADC_YAW_REVERSED false
+#define ADC_YAW_MIN 741u
+#define ADC_YAW_CTR 2081u
+#define ADC_YAW_MAX 3436u
 
 
 #elif defined(T_DISPLAY)
@@ -218,24 +253,46 @@ enum ports {
 // These are for the Jumper hall gimbals, the sensors produce less than half the
 // output range compared to the FrSky gimbals. If we were using these long term
 // the ADCs would need to be reconfigured to give more resolution.
+// #define ADC_PITCH_REVERSED false
+// #define ADC_PITCH_MIN 744u
+// #define ADC_PITCH_CTR 1262u
+// #define ADC_PITCH_MAX 1824u
+
+// #define ADC_ROLL_REVERSED true
+// #define ADC_ROLL_MIN 702u
+// #define ADC_ROLL_CTR 1207u
+// #define ADC_ROLL_MAX 1809u
+
+// #define ADC_THROTTLE_REVERSED true
+// #define ADC_THROTTLE_MIN 742u
+// #define ADC_THROTTLE_MAX 1906u
+
+// #define ADC_YAW_REVERSED false
+// #define ADC_YAW_MIN 586u
+// #define ADC_YAW_CTR 1220u
+// #define ADC_YAW_MAX 1890u
+
+// frsky M7 in the V5 prototype
+
 #define ADC_PITCH_REVERSED false
-#define ADC_PITCH_MIN 744u
-#define ADC_PITCH_CTR 1262u
-#define ADC_PITCH_MAX 1824u
+#define ADC_PITCH_MIN 726u
+#define ADC_PITCH_CTR 2080u
+#define ADC_PITCH_MAX 3497u
 
 #define ADC_ROLL_REVERSED true
-#define ADC_ROLL_MIN 702u
-#define ADC_ROLL_CTR 1207u
-#define ADC_ROLL_MAX 1809u
+#define ADC_ROLL_MIN 592u
+#define ADC_ROLL_CTR 2083u
+#define ADC_ROLL_MAX 3547u
 
 #define ADC_THROTTLE_REVERSED true
-#define ADC_THROTTLE_MIN 742u
-#define ADC_THROTTLE_MAX 1906u
+#define ADC_THROTTLE_MIN 561u
+#define ADC_THROTTLE_MAX 3504u
 
 #define ADC_YAW_REVERSED false
-#define ADC_YAW_MIN 586u
-#define ADC_YAW_CTR 1220u
-#define ADC_YAW_MAX 1890u
+#define ADC_YAW_MIN 741u
+#define ADC_YAW_CTR 2081u
+#define ADC_YAW_MAX 3436u
+
 
 #else
 #error "define the board type in config.h"
