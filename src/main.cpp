@@ -28,7 +28,7 @@
 // #define DEBUG_STATUS
 
 // uncomment for setting up the gimbals
-// #define STICK_CALIBRATION
+#define STICK_CALIBRATION
 
 
 extern "C" {
@@ -261,7 +261,7 @@ void DMA0_Channel0_IRQHandler(void)
       // TODO define some constants in config.h for indexing instead of using an ifdef here
       #if defined(PROTOTYPE_V5)
 
-      // V4: Y(1) T(0) P(2) R(3)
+      // V5: Y(1) T(0) P(2) R(3)
 
       aud_roll.update(adc_value[3]);
       aud_pitch.update(adc_value[2]);
@@ -1246,42 +1246,66 @@ void ICACHE_RAM_ATTR SendRCdataToRF()
       #endif // USE_ADC_COPRO
 
       // TODO make this a runtime mode that displays on the lcd
+      // lcd is 135x240, chars are 8x16, so we have 16x15 to work with.
+      // Apparently not, looks like the last char isn't usable, so 15x15
+
       // TODO auto calibration mode
       #ifdef STICK_CALIBRATION
+      #define SC_UPDATE_INTERVAL 100
       static uint32_t lastCalib = 0;
-      if (millis() > (lastCalib + 1000))
+      u8 buffer[32];
+      u16 foreground;
+      if (millis() > (lastCalib + SC_UPDATE_INTERVAL))
       {
          lastCalib = millis();
          static uint16_t rollMin = 9999, rollMax = 0, pitchMin = 9999, pitchMax = 0,
                         thrMin = 9999, thrMax = 0, yawMin = 9999, yawMax = 0;
+
+         foreground = WHITE;
+         BACK_COLOR = DARKBLUE;
+
+         LCD_ShowString(0, 0, (const u8*)"  MIN  CUR  MAX", foreground);
 
          uint16_t roll = aud_roll.getCurrent();
          if (roll < rollMin)
             rollMin = roll;
          if (roll > rollMax)
             rollMax = roll;
-         printf("roll %u %u %u\n\r", rollMin, roll, rollMax);
+
+         sprintf((char*)buffer, "A%4u %4u %4u", rollMin, roll, rollMax);
+         printf("%s\n\r", buffer);
+         LCD_ShowString(0, 32, buffer, foreground);
 
          uint16_t pitch = aud_pitch.getCurrent();
          if (pitch < pitchMin)
             pitchMin = pitch;
          if (pitch > pitchMax)
             pitchMax = pitch;
-         printf("pitch %u %u %u\n\r", pitchMin, pitch, pitchMax);
+
+         sprintf((char*)buffer, "E%4u %4u %4u", pitchMin, pitch, pitchMax);
+         printf("%s\n\r", buffer);
+         LCD_ShowString(0, 48, buffer, foreground);
 
          uint16_t throttle = aud_throttle.getCurrent();
          if (throttle < thrMin)
             thrMin = throttle;
          if (throttle > thrMax)
             thrMax = throttle;
-         printf("throttle %u %u %u\n\r", thrMin, throttle, thrMax);
+
+         sprintf((char*)buffer, "T%4u %4u %4u", thrMin, throttle, thrMax);
+         printf("%s\n\r", buffer);
+         LCD_ShowString(0, 64, buffer, foreground);
 
          uint16_t yaw = aud_yaw.getCurrent();
          if (yaw < yawMin)
             yawMin = yaw;
          if (yaw > yawMax)
             yawMax = yaw;
-         printf("yaw %u %u %u\n\r", yawMin, yaw, yawMax);
+
+         sprintf((char*)buffer, "R%4u %4u %4u", yawMin, yaw, yawMax);
+         printf("%s\n\r", buffer);
+         LCD_ShowString(0, 80, buffer, foreground);
+
       }
       #endif // STICK_CALIBRATION
 
@@ -1899,6 +1923,8 @@ int main(void)
       }
 
       // update LCD
+      // in stick calibration mode the lcd is used for calibration info
+      #ifndef STICK_CALIBRATION
       if (lcdRedrawNeeded || ((now - lastDebug) > 1000)) {
          lastDebug = now;
          lcdRedrawNeeded = false;
@@ -1925,6 +1951,7 @@ int main(void)
          // printf("T %ld Y %ld\n\r", aud_throttle.getCurrent(), aud_yaw.getCurrent());
 
       } // LCD update/debug
+      #endif // STICK_CALIBRATION
 
       // debug gimbal data
       // if (nSamples != 0) {
