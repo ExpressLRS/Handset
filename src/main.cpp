@@ -28,7 +28,7 @@
 // #define DEBUG_STATUS
 
 // uncomment for setting up the gimbals
-#define STICK_CALIBRATION
+// #define STICK_CALIBRATION
 
 
 extern "C" {
@@ -258,35 +258,14 @@ void DMA0_Channel0_IRQHandler(void)
       // clear interrupt bit or mcu will busy hang
       dma_interrupt_flag_clear(DMA0, DMA_CH0, DMA_INT_FLAG_FTF);
 
-      // TODO define some constants in config.h for indexing instead of using an ifdef here
-      #if defined(PROTOTYPE_V5)
+      #ifndef ADC_A_CH
+      #error "need to define the ADC channel mapping"
+      #endif
 
-      // V5: Y(1) T(0) P(2) R(3)
-
-      aud_roll.update(adc_value[3]);
-      aud_pitch.update(adc_value[2]);
-      aud_throttle.update(adc_value[0]);
-      aud_yaw.update(adc_value[1]);
-
-      #elif defined(PROTOTYPE_V4)
-
-      // V4: Y(0) T(1) P(3) R(2)
-
-      aud_roll.update(adc_value[2]);
-      aud_pitch.update(adc_value[3]);
-      aud_throttle.update(adc_value[1]);
-      aud_yaw.update(adc_value[0]);
-
-      #elif defined(PROTOTYPE_V3)
-
-      // V3: Y(0) T(1) P(2) R(3)
-
-      aud_roll.update(adc_value[3]);
-      aud_pitch.update(adc_value[2]);
-      aud_throttle.update(adc_value[1]);
-      aud_yaw.update(adc_value[0]);
-
-      #endif // adc mapping
+      aud_roll.update(adc_value[ADC_A_CH]);
+      aud_pitch.update(adc_value[ADC_E_CH]);
+      aud_throttle.update(adc_value[ADC_T_CH]);
+      aud_yaw.update(adc_value[ADC_R_CH]);
 
       nSamples++;
       now = micros();

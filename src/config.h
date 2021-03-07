@@ -3,9 +3,9 @@
 
 // which board are we using
 
-#define LONGAN_NANO
+// #define LONGAN_NANO
 // #define T_DISPLAY
-// #define PCB_V1_0
+#define PCB_V1_0
 
 // some things are specific to each build
 
@@ -20,8 +20,8 @@
 // TODO make this runtime dynamic
 // define the type of radio module being used 
 
-#define RADIO_E28_12    // CAREFUL - this will break _20 and _27 if you use it by accident
-// #define RADIO_E28_20
+// #define RADIO_E28_12    // CAREFUL - this will break _20 and _27 if you use it by accident
+#define RADIO_E28_20
 // #define RADIO_E28_27
 
 #ifdef RADIO_E28_12
@@ -274,6 +274,12 @@ enum ports {
 
 // frsky M7 in the V5 prototype
 
+// Define the mapping between ADC channels and AETR (aileron, elevator, throttle, rudder or roll, pitch, throttle, yaw)
+#define ADC_A_CH 3
+#define ADC_E_CH 2
+#define ADC_T_CH 0
+#define ADC_R_CH 1
+
 #define ADC_PITCH_REVERSED false
 #define ADC_PITCH_MIN 726u
 #define ADC_PITCH_CTR 2080u
@@ -286,6 +292,7 @@ enum ports {
 
 #define ADC_THROTTLE_REVERSED true
 #define ADC_THROTTLE_MIN 561u
+// throttle doesn't need a CTR value
 #define ADC_THROTTLE_MAX 3504u
 
 #define ADC_YAW_REVERSED false
