@@ -1633,12 +1633,68 @@ int main(void)
    LCD_ShowString(x, y, (u8 const *) msg, WHITE);
 
    // startup beep?
-   // #ifdef GPIO_BUZZER
-   // beep(50);
-   // #endif
+   #ifdef GPIO_BUZZER
+   beep(40);
+   #endif
 
    delay(500);
+
+   // Startup safety checks. Don't proceed until all switches are in off position
+   // and the throttle is at min.
+
+   // throttle threshold in the range 0 to 2000 (i.e. post scaling)
+   #define THROTTLE_SAFETY_THRESHOLD 200
+
+   bool firstSafety = true;
+
+   while (getSwitchState(SWA_HIGH, SWA_LOW) != SWITCH_LOW ||
+       getSwitchState(SWB_HIGH, SWB_LOW) != SWITCH_LOW ||
+       getSwitchState(SWC_HIGH, SWC_LOW) != SWITCH_LOW ||
+       getSwitchState(SWD_HIGH, SWD_LOW) != SWITCH_LOW ||
+       scaleThrottleData(aud_throttle.getCurrent()) > THROTTLE_SAFETY_THRESHOLD)
+   {
+      if (firstSafety) {
+         LCD_Clear(RED);
+         BACK_COLOR = RED;
+         firstSafety = false;
+      }
+      LCD_ShowString(LCD_H/2 - 36, 0, (u8 const *)"MAKE SAFE", WHITE);
+      if (getSwitchState(SWA_HIGH, SWA_LOW) != SWITCH_LOW) {
+         LCD_ShowString(LCD_H/2 - 32, 32, (u8 const *)"SWITCH A", WHITE);
+      } else {
+         LCD_ShowString(LCD_H/2 - 32,32, (u8 const *)"        ", WHITE);
+      }
+      if (getSwitchState(SWB_HIGH, SWB_LOW) != SWITCH_LOW) {
+         LCD_ShowString(LCD_H/2 - 32,48, (u8 const *)"SWITCH B", WHITE);
+      } else {
+         LCD_ShowString(LCD_H/2 - 32,48, (u8 const *)"        ", WHITE);
+      }
+      if (getSwitchState(SWC_HIGH, SWC_LOW) != SWITCH_LOW) {
+         LCD_ShowString(LCD_H/2 - 32,64, (u8 const *)"SWITCH C", WHITE);
+      } else {
+         LCD_ShowString(LCD_H/2 - 32,64, (u8 const *)"        ", WHITE);
+      }
+      if (getSwitchState(SWD_HIGH, SWD_LOW) != SWITCH_LOW) {
+         LCD_ShowString(LCD_H/2 - 32,80, (u8 const *)"SWITCH D", WHITE);
+      } else {
+         LCD_ShowString(LCD_H/2 - 32,80, (u8 const *)"        ", WHITE);
+      }
+      if (scaleThrottleData(aud_throttle.getCurrent()) > THROTTLE_SAFETY_THRESHOLD) {
+         LCD_ShowString(LCD_H/2 - 32,96, (u8 const *)"THROTTLE", WHITE);
+      } else {
+         LCD_ShowString(LCD_H/2 - 32,96, (u8 const *)"        ", WHITE);
+      }
+
+      // if user presses the rotary encoder button then cancel the safety check
+      if(RESET == gpio_input_bit_get(RE_BUTTON_PORT, RE_BUTTON_PIN)) {
+         break;
+      }
+
+      delay(100); // useful or not?
+   }
+
    LCD_Clear(DARKBLUE);
+   BACK_COLOR = DARKBLUE;
 
    printf("in main\n\r");
 
