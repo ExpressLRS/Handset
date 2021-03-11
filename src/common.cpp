@@ -1,5 +1,5 @@
-#include "common.h"
 #include "config.h"
+#include "common.h"
 
 // TODO: Validate values for RFmodeCycleAddtionalTime and RFmodeCycleInterval for rates lower than 50HZ
 

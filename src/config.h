@@ -1,6 +1,5 @@
 #pragma once
 
-
 // which board are we using
 
 // #define LONGAN_NANO
@@ -15,7 +14,13 @@
 
 // testing compat mode with mainstream elrs rx
 // TODO make dynamic
-#define ELRS_OG_COMPATIBILITY
+// #define ELRS_OG_COMPATIBILITY
+
+#ifdef ELRS_OG_COMPATIBILITY
+    #define Regulatory_Domain_ISM_2400
+#else
+    #define Regulatory_Domain_ISM_2400_NA
+#endif
 
 // TODO make this runtime dynamic
 // define the type of radio module being used 

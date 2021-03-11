@@ -1691,7 +1691,7 @@ int main(void)
       }
 
       delay(100); // useful or not?
-   }
+   } // while (not safe)
 
    LCD_Clear(DARKBLUE);
    BACK_COLOR = DARKBLUE;
