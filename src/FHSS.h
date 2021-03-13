@@ -194,7 +194,7 @@ const uint32_t FHSSfreqs[] = {
     2447000000,
     2448000000,
 };
-#elif Regulatory_Domain_ISM_2400
+#elif defined(Regulatory_Domain_ISM_2400)
 const uint32_t FHSSfreqs[] = {
     2400400000,
     2401400000,
