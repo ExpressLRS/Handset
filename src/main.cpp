@@ -727,6 +727,13 @@ void timer_config(void)
    timer_channel_output_mode_config(TIMER1, TIMER_CH_1, TIMER_OC_MODE_PWM0);
    timer_channel_output_shadow_config(TIMER1, TIMER_CH_1, TIMER_OC_SHADOW_DISABLE);
 
+   // CH2 for LCD backlight
+   timer_channel_output_config(TIMER1, TIMER_CH_2, &timer_ocinitpara);
+   timer_channel_output_pulse_value_config(TIMER1, TIMER_CH_2, 124); // max brightness
+   timer_channel_output_mode_config(TIMER1, TIMER_CH_2, TIMER_OC_MODE_PWM1); // mode 1 for longer pulse values -> brigher light
+   timer_channel_output_shadow_config(TIMER1, TIMER_CH_2, TIMER_OC_SHADOW_DISABLE);
+
+
    timer_auto_reload_shadow_enable(TIMER1);
    timer_enable(TIMER1);
 
@@ -910,6 +917,15 @@ void setup() {
 
    // turn on the various peripherals
    clock_config();
+
+   #if defined(T_DISPLAY) || defined(PCB_V1_0)
+   // lcd backlight connected to PB10 which we can control with timer1 ch2   
+   // remap B10 to the timer
+   gpio_pin_remap_config(GPIO_TIMER1_PARTIAL_REMAP1, ENABLE);
+
+   // Connect the pin to the (remapped) timer
+   gpio_init(GPIOB, GPIO_MODE_AF_PP, GPIO_OSPEED_50MHZ, GPIO_PIN_10);
+   #endif
 
    // need to remap jtag off
    // default call isn't disabling all the pins, leaving PA14 stuck with an internal pull down resistor
@@ -1617,10 +1633,6 @@ int main(void)
    LCD_Clear(DARKBLUE);
 
    #if defined(T_DISPLAY) || defined(PCB_V1_0)
-   // lcd backlight - can we hw pwm this? tim1 ch2
-   gpio_init(GPIOB, GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, GPIO_PIN_10);
-   gpio_bit_set(GPIOB, GPIO_PIN_10);
-
    setRotation(2);
    #endif
 
@@ -1634,15 +1646,18 @@ int main(void)
 
    // startup beep?
    #ifdef GPIO_BUZZER
-   beep(40);
+   // beep(30);
    #endif
 
    delay(500);
 
+   // start the battery monitor ADC (it runs in continuous mode)
+   adc_software_trigger_enable(ADC1, ADC_REGULAR_CHANNEL);
+
    // Startup safety checks. Don't proceed until all switches are in off position
    // and the throttle is at min.
 
-   // throttle threshold in the range 0 to 2000 (i.e. post scaling)
+   // throttle threshold in the range MIN_OUT to MAX_OUT (i.e. post scaling)
    #define THROTTLE_SAFETY_THRESHOLD 200
 
    bool firstSafety = true;
@@ -1658,7 +1673,27 @@ int main(void)
          BACK_COLOR = RED;
          firstSafety = false;
       }
-      LCD_ShowString(LCD_H/2 - 36, 0, (u8 const *)"MAKE SAFE", WHITE);
+      if (getSwitchState(SWD_HIGH, SWD_LOW) == SWITCH_HIGH) {
+         LCD_ShowString(LCD_H/2 - 44, 0, (u8 const *)"CHARGE MODE", WHITE);
+         timer_channel_output_pulse_value_config(TIMER1, TIMER_CH_2, 5); // low brightness
+         // read battery voltage
+         uint16_t rawBat = adc_regular_data_read(ADC1);
+         // printf("rawBat: %u\n\r", rawBat);
+
+         // max reading is 4096, represents 3V3 at the pin. Ratio on the resistor divider is about 4.
+         // Includes a factor of 100 for 2 places of fixed point precision and a fudge factor for calibration
+         uint16_t inputVoltage = rawBat*1350 / 4096;
+         // printf("inputV %u\n\r", inputVoltage);
+
+         u8 buffer[16];
+         sprintf((char*)buffer, "BAT %u.%02u", inputVoltage / 100, inputVoltage % 100);
+         LCD_ShowString(31, 144, buffer, WHITE);
+
+      } else {
+         LCD_ShowString(LCD_H/2 - 44, 0, (u8 const *)" MAKE SAFE ", WHITE);
+         timer_channel_output_pulse_value_config(TIMER1, TIMER_CH_2, 124); // max brightness
+         LCD_ShowString(31, 144, (u8 const *)"        ", WHITE); // clear any previous vbat output
+      }
       if (getSwitchState(SWA_HIGH, SWA_LOW) != SWITCH_LOW) {
          LCD_ShowString(LCD_H/2 - 32, 32, (u8 const *)"SWITCH A", WHITE);
       } else {
@@ -1711,9 +1746,6 @@ int main(void)
 
    // enable the timer for the tx interrupt
    timer_enable(TIMER2);
-
-   // start the battery monitor ADC (it runs in continuous mode)
-   adc_software_trigger_enable(ADC1, ADC_REGULAR_CHANNEL);
 
    // check if we have saved settings in the persistent store
    persistentData_t persistentData = {0,};
