@@ -1621,46 +1621,53 @@ void updateFilterSettings(uint8_t filterMode)
 
 // ==========================
 
-
-
-
-// ============================
-
-int main(void)
+/**
+ * Ideally this would use a gpio to detect charging status, but for now we will
+ * just check SWD. If the switch is in the high position at startup we will go
+ * into a low power "charging mode" display and stay there until reboot.
+ */
+void checkForChargeMode()
 {
-   // uint32_t t0, t1=0;
-   // unsigned int nSamples = 0;
+   #define CHG_BACKGROUND_COLOUR (0x3 << 11 | 0x3 << 5 | 0x5)
 
-   setup();
+   if (getSwitchState(SWD_HIGH, SWD_LOW) == SWITCH_HIGH) {
+      LCD_Clear(CHG_BACKGROUND_COLOUR);
+      BACK_COLOR = CHG_BACKGROUND_COLOUR;
 
-   Lcd_Init();
-   LCD_Clear(DARKBLUE);
+      LCD_ShowString(LCD_H/2 - 44, 0, (u8 const *)"CHARGE MODE", WHITE);
+      timer_channel_output_pulse_value_config(TIMER1, TIMER_CH_2, LCD_PWM_CHARGING); // low brightness
 
-   #if defined(T_DISPLAY) || defined(PCB_V1_0)
-   setRotation(2);
-   #endif
+      while(true)
+      {
+         // read battery voltage
+         uint16_t rawBat = adc_regular_data_read(ADC1);
 
-   // startup splash
-   BACK_COLOR = DARKBLUE;
-   const char * msg = "ExpressLRS";
-   int l = strlen(msg);
-   int x = LCD_H/2 - l*8/2;
-   int y = LCD_W/2 - 8;
-   LCD_ShowString(x, y, (u8 const *) msg, WHITE);
+         // max reading is 4096, represents 3V3 at the pin. Ratio on the resistor divider is about 4.
+         // Includes a factor of 100 for 2 places of fixed point precision and a fudge factor for calibration
+         uint16_t inputVoltage = rawBat*1350 / 4096;
 
-   // startup beep?
-   #ifdef GPIO_BUZZER
-   // beep(30);
-   #endif
+         u8 buffer[16];
+         sprintf((char*)buffer, "BAT %u.%02u", inputVoltage / 100, inputVoltage % 100);
+         LCD_ShowString(31, 144, buffer, WHITE);
 
-   delay(500);
+         // if user presses the rotary encoder button then cancel the safety check
+         if(RESET == gpio_input_bit_get(RE_BUTTON_PORT, RE_BUTTON_PIN)) {
+            timer_channel_output_pulse_value_config(TIMER1, TIMER_CH_2, LCD_PWM_MAX); // low brightness
+            break;
+         }
 
-   // start the battery monitor ADC (it runs in continuous mode)
-   adc_software_trigger_enable(ADC1, ADC_REGULAR_CHANNEL);
+         delay(200);
+      }
+   }
+}
 
-   // Startup safety checks. Don't proceed until all switches are in off position
-   // and the throttle is at min.
 
+/**
+ * Startup safety checks. 
+ * Don't proceed until all switches are in off position and the throttle is at min.
+*/
+void runSafetyChecks()
+{
    // throttle threshold in the range MIN_OUT to MAX_OUT (i.e. post scaling)
    #define THROTTLE_SAFETY_THRESHOLD 200
 
@@ -1676,25 +1683,7 @@ int main(void)
          LCD_Clear(RED);
          BACK_COLOR = RED;
          firstSafety = false;
-      }
-      if (getSwitchState(SWD_HIGH, SWD_LOW) == SWITCH_HIGH) {
-         LCD_ShowString(LCD_H/2 - 44, 0, (u8 const *)"CHARGE MODE", WHITE);
-         timer_channel_output_pulse_value_config(TIMER1, TIMER_CH_2, LCD_PWM_CHARGING); // low brightness
-         // read battery voltage
-         uint16_t rawBat = adc_regular_data_read(ADC1);
-
-         // max reading is 4096, represents 3V3 at the pin. Ratio on the resistor divider is about 4.
-         // Includes a factor of 100 for 2 places of fixed point precision and a fudge factor for calibration
-         uint16_t inputVoltage = rawBat*1350 / 4096;
-
-         u8 buffer[16];
-         sprintf((char*)buffer, "BAT %u.%02u", inputVoltage / 100, inputVoltage % 100);
-         LCD_ShowString(31, 144, buffer, WHITE);
-
-      } else {
          LCD_ShowString(LCD_H/2 - 44, 0, (u8 const *)" MAKE SAFE ", WHITE);
-         timer_channel_output_pulse_value_config(TIMER1, TIMER_CH_2, LCD_PWM_MAX); // max brightness
-         LCD_ShowString(31, 144, (u8 const *)"        ", WHITE); // clear any previous vbat output
       }
       if (getSwitchState(SWA_HIGH, SWA_LOW) != SWITCH_LOW) {
          LCD_ShowString(LCD_H/2 - 32, 32, (u8 const *)"SWITCH A", WHITE);
@@ -1729,6 +1718,48 @@ int main(void)
 
       delay(100); // useful or not?
    } // while (not safe)
+
+}
+
+
+// ============================
+
+int main(void)
+{
+   // uint32_t t0, t1=0;
+   // unsigned int nSamples = 0;
+
+   setup();
+
+   Lcd_Init();
+   LCD_Clear(DARKBLUE);
+
+   #if defined(T_DISPLAY) || defined(PCB_V1_0)
+   setRotation(2);
+   #endif
+
+   // startup splash
+   BACK_COLOR = DARKBLUE;
+   const char * msg = "ExpressLRS";
+   int l = strlen(msg);
+   int x = LCD_H/2 - l*8/2;
+   int y = LCD_W/2 - 8;
+   LCD_ShowString(x, y, (u8 const *) msg, WHITE);
+
+   // startup beep?
+   #ifdef GPIO_BUZZER
+   // beep(30);
+   #endif
+
+   delay(500);
+
+   // start the battery monitor ADC (it runs in continuous mode)
+   // need to do this before calling checkForChargeMode()
+   adc_software_trigger_enable(ADC1, ADC_REGULAR_CHANNEL);
+
+   checkForChargeMode();
+
+   runSafetyChecks();
 
    LCD_Clear(DARKBLUE);
    BACK_COLOR = DARKBLUE;
