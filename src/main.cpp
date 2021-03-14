@@ -54,6 +54,10 @@ extern "C" {
 
 #define CRSF_FRAMETYPE_LINK_STATISTICS 0x14
 
+#define LCD_PWM_MAX     124
+#define LCD_PWM_CHARGING  5
+#define LCD_PWM_ARMED    20
+
 enum SWITCH_POSITIONS
 {
    SWITCH_LOW,
@@ -1675,15 +1679,13 @@ int main(void)
       }
       if (getSwitchState(SWD_HIGH, SWD_LOW) == SWITCH_HIGH) {
          LCD_ShowString(LCD_H/2 - 44, 0, (u8 const *)"CHARGE MODE", WHITE);
-         timer_channel_output_pulse_value_config(TIMER1, TIMER_CH_2, 5); // low brightness
+         timer_channel_output_pulse_value_config(TIMER1, TIMER_CH_2, LCD_PWM_CHARGING); // low brightness
          // read battery voltage
          uint16_t rawBat = adc_regular_data_read(ADC1);
-         // printf("rawBat: %u\n\r", rawBat);
 
          // max reading is 4096, represents 3V3 at the pin. Ratio on the resistor divider is about 4.
          // Includes a factor of 100 for 2 places of fixed point precision and a fudge factor for calibration
          uint16_t inputVoltage = rawBat*1350 / 4096;
-         // printf("inputV %u\n\r", inputVoltage);
 
          u8 buffer[16];
          sprintf((char*)buffer, "BAT %u.%02u", inputVoltage / 100, inputVoltage % 100);
@@ -1691,7 +1693,7 @@ int main(void)
 
       } else {
          LCD_ShowString(LCD_H/2 - 44, 0, (u8 const *)" MAKE SAFE ", WHITE);
-         timer_channel_output_pulse_value_config(TIMER1, TIMER_CH_2, 124); // max brightness
+         timer_channel_output_pulse_value_config(TIMER1, TIMER_CH_2, LCD_PWM_MAX); // max brightness
          LCD_ShowString(31, 144, (u8 const *)"        ", WHITE); // clear any previous vbat output
       }
       if (getSwitchState(SWA_HIGH, SWA_LOW) != SWITCH_LOW) {
@@ -1787,6 +1789,7 @@ int main(void)
    uint8_t encRange = 0;
    bool displayNormal = true; // when true, current display is for 'normal' mode, when false, display is for edit mode
    unsigned long uiButtonDown = 0; // timer for long press detection
+   bool statusIsArmed = false;
    while(true) 
    {
       // If there is debug info send it to the uart
@@ -2025,6 +2028,17 @@ int main(void)
       //    printf("%lu %lu %lu %lu\n\r", aud_roll.getCurrent(), aud_pitch.getCurrent(), aud_throttle.getCurrent(), aud_yaw.getCurrent());
       //    nSamples = 0;
       // }
+
+      // React to changes of the armed state
+      if (isArmed() && !statusIsArmed) {
+         // we have become armed - dim the display
+         timer_channel_output_pulse_value_config(TIMER1, TIMER_CH_2, LCD_PWM_ARMED); // low brightness
+         statusIsArmed = true;
+      } else if (statusIsArmed && !isArmed()) {
+         // we have become disarmed - brighten the display
+         timer_channel_output_pulse_value_config(TIMER1, TIMER_CH_2, LCD_PWM_MAX); // low brightness
+         statusIsArmed = false;
+      }
 
       // provide warning beeps if the battery is getting low
       const uint16_t duration = batteryLow ? 25 : 0;
