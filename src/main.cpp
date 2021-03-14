@@ -766,7 +766,7 @@ void timer_config(void)
    timer_init(TIMER3, &timer_initpara);
    timer_quadrature_decoder_mode_config(TIMER3, TIMER_ENCODER_MODE1,  TIMER_IC_POLARITY_FALLING,  TIMER_IC_POLARITY_FALLING);
 
-   uint16_t initialValue = 100 + radioPower + 18;
+   uint16_t initialValue = 100 + radioPower + 18; // TODO check if this is meaningful, I think it gets reset when we enter edit mode
 
    timer_counter_value_config(TIMER3, initialValue);
    timer_enable(TIMER3);
@@ -1523,7 +1523,7 @@ void updateDisplayEdit()
 
    uint16_t foreground;
 
-   sprintf((char*)buffer, "Pwr  %4u", radio.getPowerMw());
+   sprintf((char*)buffer, "Pwr  %4u", radio.convertPowerToMw(radioPower));
    if (paramToChange == PARAM_POWER) {
       foreground = DARKBLUE;
       BACK_COLOR = YELLOW;
@@ -1741,7 +1741,11 @@ int main(void)
    radio.currFreq = GetInitialFreq();
    radio.Begin();
 
+   #ifdef DISARM_POWER
+   radio.SetOutputPower(DISARM_POWER);
+   #else
    radio.SetOutputPower(radioPower);
+   #endif
 
    uint8_t linkRateIndex = 0;
    SetRFLinkRate(linkRateIndex);
@@ -1758,7 +1762,9 @@ int main(void)
 
       // unpack the settings from the saved data
       radioPower = persistentData.txPower;
+      #ifndef DISARM_POWER
       radio.SetOutputPower(radioPower);
+      #endif
 
       linkRateIndex = persistentData.airmodeIndex;
       SetRFLinkRate(linkRateIndex);
@@ -1865,7 +1871,7 @@ int main(void)
          LCD_ShowString(x, y, (u8 const *) msg, BLACK);
 
          // populate the data structure
-         persistentData.txPower = radio.currPWR;
+         persistentData.txPower = radioPower;
          persistentData.airmodeIndex = ExpressLRS_currAirRate_Modparams->index;
          persistentData.sync = syncWhenArmed;
          persistentData.filterMode = currentFilterMode;
@@ -1906,7 +1912,7 @@ int main(void)
             switch (paramToChange) {
                case PARAM_POWER:
                   encRange = ((MAX_PRE_PA_POWER + 18) * 2); // MAX_PRE_PA_POWER is the last usable value, not the number of values, so don't subtract 1
-                  lastEncValue = (radio.currPWR + 18) * 2 + 100;
+                  lastEncValue = (radioPower + 18) * 2 + 100;
                   // printf("currP %d lastEnc %u\n\r", radio.currPWR, lastEncValue);
                   break;
 
@@ -1960,7 +1966,8 @@ int main(void)
             if (lastEncValue != encValue) {
                switch (paramToChange) {
                   case PARAM_POWER:
-                     radio.SetOutputPower((encValue - 100) / 2 - 18);
+                     radioPower = (encValue - 100) / 2 - 18;
+                     radio.SetOutputPower(radioPower); // update immediately so the user can override low power disarm if needed
                      break;
                   case PARAM_RATE:
                      SetRFLinkRate((encValue - 100) / 2);
@@ -2031,12 +2038,18 @@ int main(void)
 
       // React to changes of the armed state
       if (isArmed() && !statusIsArmed) {
-         // we have become armed - dim the display
+         // we have become armed - dim the display and increase tx power
          timer_channel_output_pulse_value_config(TIMER1, TIMER_CH_2, LCD_PWM_ARMED); // low brightness
+         #ifdef DISARM_POWER
+         radio.SetOutputPower(radioPower);
+         #endif
          statusIsArmed = true;
       } else if (statusIsArmed && !isArmed()) {
-         // we have become disarmed - brighten the display
+         // we have become disarmed - brighten the display, reduce tx power
          timer_channel_output_pulse_value_config(TIMER1, TIMER_CH_2, LCD_PWM_MAX); // low brightness
+         #ifdef DISARM_POWER
+         radio.SetOutputPower(DISARM_POWER);
+         #endif
          statusIsArmed = false;
       }
 

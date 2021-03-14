@@ -91,6 +91,7 @@ public:
     void ICACHE_RAM_ATTR SetFIFOaddr(uint8_t txBaseAddr, uint8_t rxBaseAddr);
     void SetOutputPower(int8_t power);
 
+    uint16_t convertPowerToMw(int power);
     uint16_t getPowerMw();
 
     int32_t ICACHE_RAM_ATTR GetFrequencyError();

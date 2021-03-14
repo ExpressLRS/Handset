@@ -144,25 +144,33 @@ void ICACHE_RAM_ATTR SX1280Driver::Config(SX1280_RadioLoRaBandwidths_t bw, SX128
     SetFrequency(freq);
 }
 
-// TODO - make subclasses of sx1280 that provide implementations of this method for each radio module 
-// TODO = should this return a float for low power modules?
-uint16_t ICACHE_RAM_ATTR SX1280Driver::getPowerMw()
+/** convert prePA power to mW
+* @param power the prePA power as used by currPWR
+*/
+uint16_t SX1280Driver::convertPowerToMw(int power)
 {
     // convert from dBm to mW
     #if defined(RADIO_E28_27)
     // for e28-27, PA output is +27dBm of the pre-PA setting, up to a max of 0 input.
-    uint16_t mw = pow10(float(currPWR+27)/10.0f);
+    uint16_t mw = pow10(float(power+27)/10.0f);
     #elif defined(RADIO_E28_20)
     // for e28-20, PA output is +22dBm of the pre-PA setting, up to a max of -2 input.
-    uint16_t mw = pow10(float(currPWR+22)/10.0f);
+    uint16_t mw = pow10(float(power+22)/10.0f);
     #elif defined(RADIO_E28_12)
     // for e28-12 output is just the current setting
-    uint16_t mw = pow10(float(currPWR)/10.0f) + 0.5; // round to nearest
+    uint16_t mw = pow10(float(power)/10.0f) + 0.5; // round to nearest
     #else
     #error("must define a radio module")
     #endif
 
     return mw;
+}
+
+// TODO - make subclasses of sx1280 that provide implementations of this method for each radio module 
+// TODO = should this return a float for low power modules?
+uint16_t ICACHE_RAM_ATTR SX1280Driver::getPowerMw()
+{
+    return convertPowerToMw(currPWR);
 }
 
 /** Set the SX1280 power output

@@ -34,6 +34,7 @@
 #define MAX_PRE_PA_POWER 13
 #elif defined(RADIO_E28_20)
 #define MAX_PRE_PA_POWER (-2)
+#define DISARM_POWER (-12)
 #elif defined(RADIO_E28_27)
 #define MAX_PRE_PA_POWER 0
 #endif
