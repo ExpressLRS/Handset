@@ -32,11 +32,13 @@
 #ifdef RADIO_E28_12
 // E28-12 and both GNICERF modules can use the full output range
 #define MAX_PRE_PA_POWER 13
+#define DISARM_POWER (0)
 #elif defined(RADIO_E28_20)
 #define MAX_PRE_PA_POWER (-2)
 #define DISARM_POWER (-12)
 #elif defined(RADIO_E28_27)
 #define MAX_PRE_PA_POWER 0
+#define DISARM_POWER (-15)
 #endif
 
 
