@@ -14,7 +14,10 @@
 
 // testing compat mode with mainstream elrs rx
 // TODO make dynamic
-// #define ELRS_OG_COMPATIBILITY
+
+#define COMPAT_LEVEL_DEV_16fbd1d011d060f56dcc9b3a33d9eead819cf440 (1)
+
+#define ELRS_OG_COMPATIBILITY COMPAT_LEVEL_DEV_16fbd1d011d060f56dcc9b3a33d9eead819cf440
 
 #ifdef ELRS_OG_COMPATIBILITY
     #define Regulatory_Domain_ISM_2400
@@ -26,8 +29,8 @@
 // define the type of radio module being used 
 
 // #define RADIO_E28_12    // CAREFUL - this will break _20 and _27 if you use it by accident
-#define RADIO_E28_20
-// #define RADIO_E28_27
+// #define RADIO_E28_20
+#define RADIO_E28_27
 
 #ifdef RADIO_E28_12
 // E28-12 and both GNICERF modules can use the full output range

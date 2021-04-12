@@ -22,7 +22,7 @@
 //
 
 // Prevents some debug print statements when uncommented
-// #define DEBUG_SUPPRESS
+#define DEBUG_SUPPRESS
 
 // Uncomment to enable some debug output on the LCD
 // #define DEBUG_STATUS
@@ -521,7 +521,10 @@ void setSentSwitch(uint8_t index, uint8_t value)
 
 void ProcessTLMpacket()
 {
+   #ifndef DEBUG_SUPPRESS
    printf("TLMpacket\n\r");
+   #endif
+
    #ifdef ELRS_OG_COMPATIBILITY
    uint8_t calculatedCRC = ota_crc.calc(radio.RXdataBuffer, 7) + CRCCaesarCipher;
    #else // not ELRS_OG_COMPATIBILITY
@@ -562,11 +565,20 @@ void ProcessTLMpacket()
    isRXconnected = true;
    LastTLMpacketRecvMillis = millis();
 
+   #if (ELRS_OG_COMPATIBILITY == COMPAT_LEVEL_DEV_16fbd1d011d060f56dcc9b3a33d9eead819cf440)
+   if (TLMheader == 1) // they changed the header value for new telem support
+   #else
    if (TLMheader == CRSF_FRAMETYPE_LINK_STATISTICS)
+   #endif
    {
       rssi = radio.RXdataBuffer[2];
       snr = radio.RXdataBuffer[4];
       lq = radio.RXdataBuffer[5];
+      // printf("T: %d %u %u\n\r", rssi, snr, lq);
+   } else {
+      #ifndef DEBUG_SUPPRESS
+      printf("TLMheader wrong %u\n\r", TLMheader);
+      #endif
    }
 }
 
@@ -631,7 +643,7 @@ void GenerateSyncPacketData()
    PacketHeaderAddr = (DeviceAddr << 2) + SYNC_PACKET;
    radio.TXdataBuffer[0] = PacketHeaderAddr;
    uint8_t fhssIndex = FHSSgetCurrIndex();
-   printf("fhss %u\n\r", fhssIndex);
+   // printf("fhss %u\n\r", fhssIndex);
    radio.TXdataBuffer[1] = fhssIndex;
 
    #ifdef ELRS_OG_COMPATIBILITY
@@ -1192,7 +1204,7 @@ void ICACHE_RAM_ATTR SendRCdataToRF()
    /////// This Part Handles the Telemetry Response ///////
    if (((uint8_t)ExpressLRS_currAirRate_Modparams->TLMinterval > 0) && thisFrameIsTelemetry())
    { // This frame is for telem, so don't attempt to transmit
-      printf("t skip\n\r");
+      // printf("t skip\n\r");
       return;
    }
 
