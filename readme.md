@@ -11,7 +11,7 @@ There will be pain.  There will be gnashing of teeth.  At this point is where we
 
 OK, now that we've set some expectations for this project we'll list some of the cool features of this handset and explain why you would want to go thru all of the effort to build instead of just purchasing a commercial handset.
 
-1. Fly at the fastest and most consistent packet rate available.  Currently this is 500Hz, but this handset is capable of much faster.  Since the MCU doesn't have to deal with OpenTX, all of its CPU cycles are used to provide the most consistent ELRS signal to the receiver and thus your flight controller.  This is the main goal of this project, to increase the performance and stability of the ELRS radio link.  With this handset, you'll be right on the bleeding edge.
+1. Fly at the fastest and most consistent packet rate available.  Currently this is 500Hz, but this handset is capable of much faster.  Since the MCU doesn't have to deal with OpenTX, all of its CPU cycles are used to provide the most consistent ELRS signal to the receiver and thus your flight controller.  This is the main goal of this project, to increase the performance and stability of the ELRS radio link.  With this handset, you'll be right on the bleeding edge with the devs.
 2. Uses FrSky M10 Hall Effect gimbals.  If you want the best radio signal, you start with the best data.
 3. Hardware Filtering of gimbal data.  Select a level of hardware filtering by swapping out custom daughterboards to fine tune your feel.
 4. Swappable RF deck.  RF deck is on a replaceable daughterboard so you can swap from 2.4GHz to 900MHz bands. (900 MHz modules currently not developed)
