@@ -14,7 +14,7 @@ OK, now that we've set some expectations for this project we'll list some of the
 1. Fly at the fastest and most consistent packet rate available.  Currently this is 500Hz, but this handset is capable of much faster.  Since the MCU doesn't have to deal with OpenTX, all of its CPU cycles are used to provide the most consistent ELRS signal to the receiver and thus your flight controller.  This is the main goal of this project, to increase the performance and stability of the ELRS radio link.  With this handset, you'll be right on the bleeding edge.
 2. Uses FrSky M10 Hall Effect gimbals.  If you want the best radio signal, you start with the best data.
 3. Hardware Filtering of gimbal data.  Select a level of hardware filtering by swapping out custom daughterboards to fine tune your feel.
-4. Swappable RF deck.  RF deck is on a replaceable daughterboard so you can swap from 2.4GHz to 900MHz bands.
+4. Swappable RF deck.  RF deck is on a replaceable daughterboard so you can swap from 2.4GHz to 900MHz bands. (900 MHz modules currently not developed)
 5. 1S2P 18650 LiPo battery.  Entire handset sips power from 2 LiPos in parallel.  Fly an entire weekend without charging.
 6. Wireless Qi charging.  Build a charging cradle that will wirelessly charge your handset when you're not flying.
 7. Internal Moxon antenna.  Transmit antenna is mounted internally for aesthetics, but can be mounted externally simply by drilling a hole.
