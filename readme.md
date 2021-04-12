@@ -18,4 +18,5 @@ OK, now that we've set some expectations for this project we'll list some of the
 5. 1S2P 18650 LiPo battery.  Entire handset sips power from 2 LiPos in parallel.  Fly an entire weekend without charging.
 6. Wireless Qi charging.  Build a charging cradle that will wirelessly charge your handset when you're not flying.
 7. Internal Moxon antenna.  Transmit antenna is mounted internally for aesthetics, but can be mounted externally simply by drilling a hole.
-8. Simplified operation.  Quad fliers rarely use 99% of the mixing functions of OpenTX since all of that is done in the Flight Controller. 
+8. Simplified operation.  Quad fliers rarely use 99% of the mixing functions of OpenTX since all of that is done in the Flight Controller.
+9. Parts should be less than $100 U.S.
