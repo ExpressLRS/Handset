@@ -21,3 +21,7 @@ OK, now that we've set some expectations for this project we'll list some of the
 8. Simplified operation.  Quad fliers rarely use 99% of the mixing functions of OpenTX since all of that is done in the Flight Controller.
 9. Parts should be less than $100 U.S.
 10. Did I mention wireless Qi charging?
+
+At this time the best source of information on this project is our OneDrive folder:
+https://1drv.ms/u/s!Ap0n6SxbLP9mspxu-dxmtthcFGTxvA?e=23NiK6
+
