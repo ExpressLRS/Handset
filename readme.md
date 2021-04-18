@@ -23,5 +23,6 @@ OK, now that we've set some expectations for this project we'll list some of the
 10. Did I mention wireless Qi charging?
 
 At this time the best source of information on this project is our OneDrive folder:
+
 https://1drv.ms/u/s!Ap0n6SxbLP9mspxu-dxmtthcFGTxvA?e=23NiK6
 
