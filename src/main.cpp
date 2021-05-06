@@ -209,7 +209,11 @@ uint8_t snr, lq;
 
 #include "crc.h"
 
+#if (ELRS_OG_COMPATIBILITY == COMPAT_LEVEL_1_0_0_RC2)
+GENERIC_CRC14 ota_crc(ELRS_CRC14_POLY);
+#elif defined(ELRS_OG_COMPATIBILITY)
 GENERIC_CRC8 ota_crc(ELRS_CRC_POLY);
+#endif
 
 
 
@@ -525,13 +529,19 @@ void ProcessTLMpacket()
    printf("TLMpacket\n\r");
    #endif
 
-   #ifdef ELRS_OG_COMPATIBILITY
+   #if (ELRS_OG_COMPATIBILITY == COMPAT_LEVEL_1_0_0_RC2)
+   uint16_t inCRC = radio.RXdataBuffer[0] & 0b11111100;
+   inCRC = (inCRC << 6) + radio.RXdataBuffer[7];
+   radio.RXdataBuffer[0] &= 0b11;   // remove the OTA crc bits before calculating the crc
+   uint16_t calculatedCRC = ota_crc.calc(radio.RXdataBuffer, 7);
+   #elif (ELRS_OG_COMPATIBILITY == COMPAT_LEVEL_DEV_16fbd1d011d060f56dcc9b3a33d9eead819cf440)
    uint8_t calculatedCRC = ota_crc.calc(radio.RXdataBuffer, 7) + CRCCaesarCipher;
+   uint8_t inCRC = radio.RXdataBuffer[7];
    #else // not ELRS_OG_COMPATIBILITY
    uint8_t calculatedCRC = CalcCRC(radio.RXdataBuffer, 7) + CRCCaesarCipher;
+   uint8_t inCRC = radio.RXdataBuffer[7];
    #endif // ELRS_OG_COMPATIBILITY
 
-   uint8_t inCRC = radio.RXdataBuffer[7];
    if ((inCRC != calculatedCRC))
    {
       #ifndef DEBUG_SUPPRESS
@@ -541,9 +551,10 @@ void ProcessTLMpacket()
    }
 
    uint8_t type = radio.RXdataBuffer[0] & TLM_PACKET;
-   uint8_t packetAddr = (radio.RXdataBuffer[0] & 0b11111100) >> 2;
    uint8_t TLMheader = radio.RXdataBuffer[1];
 
+   #if (ELRS_OG_COMPATIBILITY != COMPAT_LEVEL_1_0_0_RC2) // no packetAddr from V1 onwards
+   uint8_t packetAddr = (radio.RXdataBuffer[0] & 0b11111100) >> 2;
    if (packetAddr != DeviceAddr)
    {
       #ifndef DEBUG_SUPPRESS
@@ -551,6 +562,7 @@ void ProcessTLMpacket()
       #endif
       return;
    }
+   #endif
 
    //   packetCounteRX_TX++;
 
@@ -565,7 +577,7 @@ void ProcessTLMpacket()
    isRXconnected = true;
    LastTLMpacketRecvMillis = millis();
 
-   #if (ELRS_OG_COMPATIBILITY == COMPAT_LEVEL_DEV_16fbd1d011d060f56dcc9b3a33d9eead819cf440)
+   #if (ELRS_OG_COMPATIBILITY == COMPAT_LEVEL_DEV_16fbd1d011d060f56dcc9b3a33d9eead819cf440 || ELRS_OG_COMPATIBILITY == COMPAT_LEVEL_1_0_0_RC2)
    if (TLMheader == 1) // they changed the header value for new telem support
    #else
    if (TLMheader == CRSF_FRAMETYPE_LINK_STATISTICS)
@@ -599,7 +611,6 @@ bool thisFrameIsTelemetry()
    #ifdef ELRS_OG_COMPATIBILITY
    uint8_t modresult = (NonceTX+1) % TLMratioEnumToValue(ExpressLRS_currAirRate_Modparams->TLMinterval);
    #else
-   // use nonce+1 because we're getting ready for the next frame
    uint8_t modresult = (NonceTX) % TLMratioEnumToValue(ExpressLRS_currAirRate_Modparams->TLMinterval);
    #endif // ELRS_OG_COMPATIBILITY
 
@@ -640,11 +651,16 @@ void setTimerISRInterval(uint32_t interval)
 void GenerateSyncPacketData()
 {
    uint8_t PacketHeaderAddr;
-   PacketHeaderAddr = (DeviceAddr << 2) + SYNC_PACKET;
+   PacketHeaderAddr = (DeviceAddr << 2) + SYNC_PACKET; // addr isn't used in compatibility mode from V1, but will get overwritten by the crc14 anyway
    radio.TXdataBuffer[0] = PacketHeaderAddr;
    uint8_t fhssIndex = FHSSgetCurrIndex();
    // printf("fhss %u\n\r", fhssIndex);
+
+   #if (ELRS_OG_COMPATIBILITY == COMPAT_LEVEL_1_0_0_RC2)
+   radio.TXdataBuffer[1] = fhssIndex+1;   // V1 shifted the fhss index by 1
+   #else
    radio.TXdataBuffer[1] = fhssIndex;
+   #endif
 
    #ifdef ELRS_OG_COMPATIBILITY
    radio.TXdataBuffer[2] = NonceTX+1;
@@ -1104,7 +1120,7 @@ void blink(uint32_t port, uint32_t pin)
 void ICACHE_RAM_ATTR GenerateChannelDataHybridSwitch8(volatile uint8_t* Buffer, uint16_t *adcData, uint8_t addr)
 {
    uint8_t PacketHeaderAddr;
-   PacketHeaderAddr = (addr << 2) + RC_DATA_PACKET;
+   PacketHeaderAddr = (addr << 2) + RC_DATA_PACKET; // ELRS V1 RC2 doesn't use addr, but it will be overwritten by crc anyway
    Buffer[0] = PacketHeaderAddr;
    Buffer[1] = ((adcData[0]) >> 3);
    Buffer[2] = ((adcData[1]) >> 3);
@@ -1115,20 +1131,59 @@ void ICACHE_RAM_ATTR GenerateChannelDataHybridSwitch8(volatile uint8_t* Buffer, 
                ((adcData[2] & 0b110) << 1) +
                ((adcData[3] & 0b110) >> 1);
 
-  // switch 0 is sent on every packet - intended for low latency arm/disarm
-  Buffer[6] = (currentSwitches[0] & 0b11) << 5; // note this leaves the top bit of byte 6 unused
 
-  // find the next switch to send
-  uint8_t nextSwitchIndex = getNextSwitchIndex() & 0b111;      // mask for paranoia
-  uint8_t value = currentSwitches[nextSwitchIndex] & 0b11; // mask for paranoia
+   #if (ELRS_OG_COMPATIBILITY == COMPAT_LEVEL_1_0_0_RC2)
 
-  // put the bits into buf[6]. nextSwitchIndex is in the range 1 through 7 so takes 3 bits
-  // currentSwitches[nextSwitchIndex] is in the range 0 through 2, takes 2 bits.
-  Buffer[6] += (nextSwitchIndex << 2) + value;
+   // ELRS compatibility V1 RC2 switch format
+   // find the next switch to send
+   uint8_t nextSwitchIndex = getNextSwitchIndex();
+   // Actually send switchIndex - 1 in the packet, to shift down 1-7 (0b111) to 0-6 (0b110)
+   // If the two high bits are 0b11, the receiver knows it is the last switch and can use
+   // that bit to store data
+   uint8_t bitclearedSwitchIndex = nextSwitchIndex - 1;
+   // currentSwitches[] is 0-15 for index 1, 0-2 for index 2-7 // XXX this seems wrong. most switches have 3 bits available, and last switch is the multiway?
+   // Rely on currentSwitches to *only* have values in that range
+   // TODO ok, so the new switch position values are _slightly_ counterintuitive, and will need mapping from the existing 0,1,2 encoding.
+   //   case 0: return CRSF_CHANNEL_VALUE_1000;
+   //   case 5: return CRSF_CHANNEL_VALUE_2000;
+   //   case 6: // fallthrough
+   //   case 7: return CRSF_CHANNEL_VALUE_MID;
+   
+   uint8_t value = 0; // default to low position
+   switch(currentSwitches[nextSwitchIndex]) {
+      case 1:  // middle position
+        value = 7;
+        break;
+      case 2: // high position
+        value = 5;
+        break;
+   }
 
+   Buffer[6] =
+         // switch 0 is one bit sent on every packet - intended for low latency arm/disarm
+         (currentSwitches[0] / 2) << 6 |   // down-convert the arm switch to on/off, using only the highest setting for on
+         // tell the receiver which switch index this is
+         bitclearedSwitchIndex << 3 |
+         // include the switch value
+         value;
 
-  // update the sent value
-  setSentSwitch(nextSwitchIndex, value);
+   #else
+
+   // switch 0 is sent on every packet - intended for low latency arm/disarm
+   Buffer[6] = (currentSwitches[0] & 0b11) << 5; // note this leaves the top bit of byte 6 unused
+
+   // find the next switch to send
+   uint8_t nextSwitchIndex = getNextSwitchIndex() & 0b111;      // mask for paranoia
+   uint8_t value = currentSwitches[nextSwitchIndex] & 0b11; // mask for paranoia
+
+   // put the bits into buf[6]. nextSwitchIndex is in the range 1 through 7 so takes 3 bits
+   // currentSwitches[nextSwitchIndex] is in the range 0 through 2, takes 2 bits.
+   Buffer[6] += (nextSwitchIndex << 2) + value;
+
+   #endif // ELRS compatibility for V1 RC2
+
+   // update the sent value
+   setSentSwitch(nextSwitchIndex, value);
 }
 
 // crsf uses a reduced range, and BF expects to see it.
@@ -1331,19 +1386,28 @@ void ICACHE_RAM_ATTR SendRCdataToRF()
 
    ///// Next, Calculate the CRC and put it into the buffer /////
 
-   #ifdef ELRS_OG_COMPATIBILITY
+   #if (ELRS_OG_COMPATIBILITY == COMPAT_LEVEL_1_0_0_RC2)
 
-   // TODO - make this the default for all cases
+   // need to clear the crc bits of the first byte before calculating the crc
+   radio.TXdataBuffer[0] &= 0b11;
+
+   uint16_t crc = ota_crc.calc(radio.TXdataBuffer, 7);
+   radio.TXdataBuffer[0] |= (crc >> 6) & 0b11111100;
+   radio.TXdataBuffer[7] = crc & 0xFF;
+
+   #elif (ELRS_OG_COMPATIBILITY == COMPAT_LEVEL_DEV_16fbd1d011d060f56dcc9b3a33d9eead819cf440)
+
    uint8_t crc = ota_crc.calc(radio.TXdataBuffer, 7) + CRCCaesarCipher;
+   radio.TXdataBuffer[7] = crc;
 
    #else // not ELRS_OG_COMPATIBILITY
 
+   // TODO change to crc14
    uint8_t crc = CalcCRC(radio.TXdataBuffer, 7) + CRCCaesarCipher;
+   radio.TXdataBuffer[7] = crc;
 
    #endif // ELRS_OG_COMPATIBILITY
 
-   radio.TXdataBuffer[7] = crc;
-   
 
    // gpio_bit_reset(LED_GPIO_PORT, LED_PIN);  // clear the rx debug pin as we're definitely not listening now
 
@@ -1359,6 +1423,13 @@ void ICACHE_RAM_ATTR SendRCdataToRF()
 // Update the radio and timer for the specified air rate
 void SetRFLinkRate(uint8_t index)
 {
+   bool invertIQ = false;
+
+   #if (ELRS_OG_COMPATIBILITY == COMPAT_LEVEL_1_0_0_RC2)
+   invertIQ = (bool)(UID[5] & 0x01);
+   printf("invertIQ %d\n", invertIQ);
+   #endif
+
    expresslrs_mod_settings_s *const ModParams = get_elrs_airRateConfig(index);
    expresslrs_rf_pref_params_s *const RFperf = get_elrs_RFperfParams(index);
 
@@ -1368,7 +1439,7 @@ void SetRFLinkRate(uint8_t index)
    } else 
    #endif
    {
-      radio.Config(ModParams->bw, ModParams->sf, ModParams->cr, GetInitialFreq(), ModParams->PreambleLen);
+      radio.Config(ModParams->bw, ModParams->sf, ModParams->cr, GetInitialFreq(), ModParams->PreambleLen, invertIQ);
    }
 
 

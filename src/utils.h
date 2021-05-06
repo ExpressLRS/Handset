@@ -1,9 +1,6 @@
 
 #pragma once
 
-
-
-
 unsigned long millis(void);
 unsigned long micros(void);
 uint8_t spi1_transfer(uint8_t x);
@@ -18,7 +15,7 @@ void rngSeed(long newSeed);
 unsigned int rngN(unsigned int max);
 
 // CRSF compatible crc.
-// TODO Add a better crsf for elrs ota
+// (see crc.cpp for crc14 impl)
 
 /* CRC8 implementation with polynom = x​7​+ x​6​+ x​4​+ x​2​+ x​0 ​(0xD5) */
 static const unsigned char crc8tab[256] = {
