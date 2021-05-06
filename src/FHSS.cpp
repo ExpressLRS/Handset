@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include "FHSS.h"
 #include "Serial.h"
+#include "config.h"
 
 uint8_t volatile FHSSptr = 0; // XXX must be 8 bit unsigned to wrap when incremented,
 #if (NR_SEQUENCE_ENTRIES != 256)
@@ -99,7 +100,11 @@ void ICACHE_RAM_ATTR FHSSrandomiseFHSSsequence()
     // The 0 index is special - the 'sync' channel. The sync channel appears every
     // syncInterval hops. The other channels are randomly distributed between the
     // sync channels
+    #if (ELRS_OG_COMPATIBILITY == COMPAT_LEVEL_1_0_0_RC2)
+    const int SYNC_INTERVAL = NR_FHSS_ENTRIES;
+    #else
     const int SYNC_INTERVAL = NR_FHSS_ENTRIES -1;
+    #endif
 
     int nLeft = NR_FHSS_ENTRIES - 1; // how many channels are left to be allocated. Does not include the sync channel
     unsigned int prev = 0;           // needed to prevent repeats of the same index

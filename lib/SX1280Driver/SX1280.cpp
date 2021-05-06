@@ -89,6 +89,7 @@ void SX1280Driver::setupLora()
     #ifdef USE_HARDWARE_CRC
     this->SetPacketParams(12, SX1280_LORA_PACKET_IMPLICIT, 8, SX1280_LORA_CRC_ON, SX1280_LORA_IQ_NORMAL);
     #else
+    // TODO this ignores the UID based setup of IQ. Doesn't seem to matter, but seems like a problem waiting to happen
     this->SetPacketParams(12, SX1280_LORA_PACKET_IMPLICIT, 8, SX1280_LORA_CRC_OFF, SX1280_LORA_IQ_NORMAL);
     #endif
 }
@@ -131,14 +132,22 @@ void ICACHE_RAM_ATTR SX1280Driver::ConfigFLRC(uint32_t freq)
 
 
 void ICACHE_RAM_ATTR SX1280Driver::Config(SX1280_RadioLoRaBandwidths_t bw, SX1280_RadioLoRaSpreadingFactors_t sf, 
-                                            SX1280_RadioLoRaCodingRates_t cr, uint32_t freq, uint8_t PreambleLength)
+                                          SX1280_RadioLoRaCodingRates_t cr, uint32_t freq, const uint8_t PreambleLength, const bool invertIQ)
 {
+    SX1280_RadioLoRaIQModes_t iqMode;
+
+    if (invertIQ) {
+        iqMode = SX1280_LORA_IQ_INVERTED;
+    } else {
+        iqMode = SX1280_LORA_IQ_NORMAL;
+    }
+
     this->SetMode(SX1280_MODE_STDBY_XOSC);
     ConfigModParams(bw, sf, cr);
     #ifdef USE_HARDWARE_CRC
-    SetPacketParams(PreambleLength, SX1280_LORA_PACKET_IMPLICIT, 8, SX1280_LORA_CRC_ON, SX1280_LORA_IQ_NORMAL); // TODO don't make static etc.
+    SetPacketParams(PreambleLength, SX1280_LORA_PACKET_IMPLICIT, 8, SX1280_LORA_CRC_ON, iqMode);
     #else
-    SetPacketParams(PreambleLength, SX1280_LORA_PACKET_IMPLICIT, 8, SX1280_LORA_CRC_OFF, SX1280_LORA_IQ_NORMAL); // TODO don't make static etc.
+    SetPacketParams(PreambleLength, SX1280_LORA_PACKET_IMPLICIT, 8, SX1280_LORA_CRC_OFF, iqMode);
     #endif
 
     SetFrequency(freq);
@@ -167,7 +176,7 @@ uint16_t SX1280Driver::convertPowerToMw(int power)
 }
 
 // TODO - make subclasses of sx1280 that provide implementations of this method for each radio module 
-// TODO = should this return a float for low power modules?
+// TODO = should this return a float to better represet output of low power modules?
 uint16_t ICACHE_RAM_ATTR SX1280Driver::getPowerMw()
 {
     return convertPowerToMw(currPWR);
