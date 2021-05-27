@@ -1137,6 +1137,9 @@ void ICACHE_RAM_ATTR GenerateChannelDataHybridSwitch8(volatile uint8_t* Buffer, 
    // ELRS compatibility V1 RC2 switch format
    // find the next switch to send
    uint8_t nextSwitchIndex = getNextSwitchIndex();
+
+   uint8_t sentValue = currentSwitches[nextSwitchIndex];
+
    // Actually send switchIndex - 1 in the packet, to shift down 1-7 (0b111) to 0-6 (0b110)
    // If the two high bits are 0b11, the receiver knows it is the last switch and can use
    // that bit to store data
@@ -1173,8 +1176,9 @@ void ICACHE_RAM_ATTR GenerateChannelDataHybridSwitch8(volatile uint8_t* Buffer, 
    Buffer[6] = (currentSwitches[0] & 0b11) << 5; // note this leaves the top bit of byte 6 unused
 
    // find the next switch to send
-   uint8_t nextSwitchIndex = getNextSwitchIndex() & 0b111;      // mask for paranoia
-   uint8_t value = currentSwitches[nextSwitchIndex] & 0b11; // mask for paranoia
+   uint8_t nextSwitchIndex = getNextSwitchIndex() & 0b111;     // mask for paranoia
+   uint8_t sentValue = currentSwitches[nextSwitchIndex];       // avoid the possibility that the mask changes the value
+   uint8_t value = sentValue & 0b11; // mask for paranoia
 
    // put the bits into buf[6]. nextSwitchIndex is in the range 1 through 7 so takes 3 bits
    // currentSwitches[nextSwitchIndex] is in the range 0 through 2, takes 2 bits.
@@ -1183,7 +1187,7 @@ void ICACHE_RAM_ATTR GenerateChannelDataHybridSwitch8(volatile uint8_t* Buffer, 
    #endif // ELRS compatibility for V1 RC2
 
    // update the sent value
-   setSentSwitch(nextSwitchIndex, value);
+   setSentSwitch(nextSwitchIndex, sentValue);
 }
 
 // crsf uses a reduced range, and BF expects to see it.
