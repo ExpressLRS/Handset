@@ -1813,6 +1813,8 @@ void runSafetyChecks()
 
 int main(void)
 {
+   uint8_t linkRateIndex = 0; // default value in case we don't have anything in persistant storage
+
    // uint32_t t0, t1=0;
    // unsigned int nSamples = 0;
 
@@ -1865,12 +1867,6 @@ int main(void)
    radio.SetOutputPower(radioPower);
    #endif
 
-   uint8_t linkRateIndex = 0;
-   SetRFLinkRate(linkRateIndex);
-
-   // enable the timer for the tx interrupt
-   timer_enable(TIMER2);
-
    // check if we have saved settings in the persistent store
    persistentData_t persistentData = {0,};
 
@@ -1885,7 +1881,6 @@ int main(void)
       #endif
 
       linkRateIndex = persistentData.airmodeIndex;
-      SetRFLinkRate(linkRateIndex);
 
       syncWhenArmed = (bool)persistentData.sync;
 
@@ -1897,6 +1892,12 @@ int main(void)
    } else {
       printf("persistent data not found\n\r");
    }
+
+   SetRFLinkRate(linkRateIndex);
+
+   // enable the timer for the tx interrupt
+   timer_enable(TIMER2);
+
 
    // === Next section is the event loop ===
 
