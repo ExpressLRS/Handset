@@ -93,6 +93,7 @@ extern "C" {
    void HandleTLM();
    void HandleFHSS();
    void ProcessTLMpacket();
+   void SetRFLinkRate(uint8_t rate);
 }
 
 // debug baud rate
@@ -207,6 +208,14 @@ SX1280Driver radio;
 int8_t rssi;
 uint8_t snr, lq;
 
+// For deferred packet rate change
+int8_t nextLinkRate = -1;
+uint8_t syncSpamCounter = 0;
+uint32_t lastLinkRateChangeTime = 0;
+
+bool lcdRedrawNeeded = false;
+
+
 #include "crc.h"
 
 #if (ELRS_OG_COMPATIBILITY == COMPAT_LEVEL_1_0_0_RC2)
@@ -239,10 +248,20 @@ void TIMER2_IRQHandler(void)
       NonceTX++; // New - just increment the nonce on every frame
 
       #ifdef ELRS_OG_COMPATIBILITY
+
       HandleFHSS(); // experimental - can we do fhss here?
+
+      // is there a deferred packet rate change?
+      if (nextLinkRate != -1 && syncSpamCounter == 0) {
+         // printf("nextLinkRate set %d\n\r", nextLinkRate);
+         SetRFLinkRate(nextLinkRate);
+         nextLinkRate = -1;
+         lcdRedrawNeeded = true;
+      }
+
       #else
       // fhss is in txdone
-      #endif
+      #endif // ELRS_OG_COMPATIBILITY
 
       SendRCdataToRF();
    }
@@ -669,10 +688,20 @@ void GenerateSyncPacketData()
    #endif //ELRS_OG_COMPATIBILITY
 
    #ifdef ELRS_OG_COMPATIBILITY
+
    uint8_t SwitchEncMode = 0b01; // handset only supports hybrid8, so this is the only possible value
-   uint8_t Index = (ExpressLRS_currAirRate_Modparams->index & 0b11);
+   uint8_t Index;
+   if (syncSpamCounter != 0 && nextLinkRate != -1) {
+      // Notify the RX that we're going to change packet rate
+      Index = (nextLinkRate & 0b11);
+      syncSpamCounter--;
+   } else {
+      // Send the current packet rate
+      Index = (ExpressLRS_currAirRate_Modparams->index & 0b11);
+   }
    uint8_t TLMrate = (ExpressLRS_currAirRate_Modparams->TLMinterval & 0b111);
    radio.TXdataBuffer[3] = (Index << 6) + (TLMrate << 3) + (SwitchEncMode << 1);
+
    #else // not ELRS_OG_COMPATIBILITY
    radio.TXdataBuffer[3] = ((ExpressLRS_currAirRate_Modparams->index & 0b111) << 5) + ((ExpressLRS_currAirRate_Modparams->TLMinterval & 0b111) << 2);
    #endif // ELRS_OG_COMPATIBILITY
@@ -1271,23 +1300,25 @@ void ICACHE_RAM_ATTR SendRCdataToRF()
   if (isRXconnected)
   {
     SyncInterval = ExpressLRS_currAirRate_RFperfParams->SyncPktIntervalConnected;
-  }
-  else
-  {
+  } else {
     SyncInterval = ExpressLRS_currAirRate_RFperfParams->SyncPktIntervalDisconnected;
   }
 
-  //if (((millis() > (SyncPacketLastSent + SyncInterval)) && (Radio.currFreq == GetInitialFreq()))) //only send sync when its time and only on channel 0;
-  //if ((millis() > ((SyncPacketLastSent + SYNC_PACKET_SEND_INTERVAL_RX_CONN)) && (Radio.currFreq == GetInitialFreq())) || ((isRXconnected == false) && (Radio.currFreq == GetInitialFreq())))
-  
+
   if ((syncWhenArmed || !isArmed()) &&    // send sync packets when not armed, or always if syncWhenArmed is true
-     ((millis() - SyncPacketLastSent) > SyncInterval) && 
-      (radio.currFreq == GetInitialFreq()) && 
-      ((NonceTX) % ExpressLRS_currAirRate_Modparams->FHSShopInterval == 1)) // sync just after we changed freqs (helps with hwTimer.init() being in sync from the get go)
+         (  (syncSpamCounter != 0 && (millis() - lastLinkRateChangeTime > 300)) ||  // if we're trying to notify the rx of changing packet rate, just do it, otherwise...
+            (
+               ((millis() - SyncPacketLastSent) > SyncInterval) && // ...has enough time passed?
+               (radio.currFreq == GetInitialFreq()) &&             // we're on the sync frequency
+               // sync just after we changed freqs (helps with hwTimer.init() being in sync from the get go)
+               (NonceTX % ExpressLRS_currAirRate_Modparams->FHSShopInterval == 1)
+            )
+         )
+      )
   {
       GenerateSyncPacketData();
       SyncPacketLastSent = millis();
-   //  ChangeAirRateSentUpdate = true;
+
     //Serial.println("sync");
     //Serial.println(Radio.currFreq);
   }
@@ -1318,6 +1349,8 @@ void ICACHE_RAM_ATTR SendRCdataToRF()
       // TODO make this a runtime mode that displays on the lcd
       // lcd is 135x240, chars are 8x16, so we have 16x15 to work with.
       // Apparently not, looks like the last char isn't usable, so 15x15
+
+      // TODO this seems like a really ugly place to have this code, move it somewhere else?
 
       // TODO auto calibration mode
       #ifdef STICK_CALIBRATION
@@ -1417,11 +1450,6 @@ void ICACHE_RAM_ATTR SendRCdataToRF()
 
    radio.TXnb(radio.TXdataBuffer, 8);
 
-
-//   if (ChangeAirRateRequested)
-//   {
-//     ChangeAirRateSentUpdate = true;
-//   }
 }
 
 // Update the radio and timer for the specified air rate
@@ -1872,7 +1900,7 @@ int main(void)
 
    uint8_t res = SimpleStore::read(CONFIG_STORE_ID, sizeof(persistentData), &persistentData);
    if (res == SS_OK) {
-      printf("found settings in persistent store\n");
+      printf("found settings in persistent store\n\r");
 
       // unpack the settings from the saved data
       radioPower = persistentData.txPower;
@@ -1910,7 +1938,6 @@ int main(void)
    unsigned long lastSwitchMoved = 0;
    bool switchesHaveMoved = false;
    uint8_t lastParamToChange = PARAM_NONE;
-   bool lcdRedrawNeeded = false;
    uint8_t encRange = 0;
    bool displayNormal = true; // when true, current display is for 'normal' mode, when false, display is for edit mode
    unsigned long uiButtonDown = 0; // timer for long press detection
@@ -2089,7 +2116,14 @@ int main(void)
                      radio.SetOutputPower(radioPower); // update immediately so the user can override low power disarm if needed
                      break;
                   case PARAM_RATE:
+                     #ifdef ELRS_OG_COMPATIBILITY
+                     // defer the change until we've sent some sync packets to kick the rx to the new setting
+                     nextLinkRate = (encValue - 100) / 2;
+                     syncSpamCounter = 3;
+                     lastLinkRateChangeTime = millis();
+                     #else
                      SetRFLinkRate((encValue - 100) / 2);
+                     #endif // ELRS_OG_COMPATIBILITY
                      break;
                   case PARAM_TLM_INT:
                      ExpressLRS_currAirRate_Modparams->TLMinterval = (expresslrs_tlm_ratio_e)((encValue - 100) / 2);
