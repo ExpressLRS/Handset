@@ -1697,15 +1697,19 @@ void updateDisplayEdit()
    }
    LCD_ShowString(0, 96, (const u8*)"Sync ", foreground);
    if (syncWhenArmed) {
-         LCD_ShowString(48, 96, (const u8*)"ON ", foreground);
+         LCD_ShowString(48, 96, (const u8*)"Always", foreground);
    } else {
-         LCD_ShowString(48, 96, (const u8*)"OFF", foreground);
+         LCD_ShowString(48, 96, (const u8*)"Disarm", foreground);
    }
 
-   // TODO exit mechanism
-
-   // reset the background colour
+   foreground = WHITE;
    BACK_COLOR = DARKBLUE;
+
+   LCD_ShowString(LCD_H/2 - 40, 200, (const u8*)"Long press", foreground);
+   LCD_ShowString(LCD_H/2 - 32, 216, (const u8*)"to save", foreground);
+
+
+   // TODO exit mechanism
 }
 
 // ============================
