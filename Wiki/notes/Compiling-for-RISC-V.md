@@ -26,6 +26,8 @@ see: https://github.com/riscv-mcu/GD32VF103_Firmware_Library/issues/1
 
 2) Build fails with missing dfu-suffix tool
 
+(Looks like this may have been fixed in recent platformio versions)
+
 Problem:
 
 ```
@@ -44,4 +46,12 @@ Download dfu-utils from https://bintray.com/platformio/tool-packages (use search
 $HOME/.platformio/packages/tool-dfuutil
 
 see https://community.platformio.org/t/dfu-suffix-not-found-for-longan-nano-build/16710/4
+
+dfu-util: Cannot open DFU device 28e9:0189
+
+On Linux, indicates a need to add a rule to udev. Either create a new file in /etc/udev/rules.d or add to an existing one if you already have stuff for other dfu (e.g. betaflight FC controllers)
+
+ACTION=="add", SUBSYSTEM=="usb", ATTRS{idVendor}=="28e9", ATTRS{idProduct}=="0189", MODE="0666", GROUP="<whichever group you want to use for dfu access>"
+  
+I just use my main userid group for access rather than going to the trouble of adding a special one for dfu.
 
