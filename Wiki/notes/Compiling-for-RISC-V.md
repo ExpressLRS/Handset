@@ -55,3 +55,9 @@ ACTION=="add", SUBSYSTEM=="usb", ATTRS{idVendor}=="28e9", ATTRS{idProduct}=="018
   
 I just use my main userid group for access rather than going to the trouble of adding a special one for dfu.
 
+You may need to run
+```
+udevadm control --reload-rules
+udevadm trigger
+```
+as root after updating the rules for them to take effect.
