@@ -47,7 +47,7 @@ $HOME/.platformio/packages/tool-dfuutil
 
 see https://community.platformio.org/t/dfu-suffix-not-found-for-longan-nano-build/16710/4
 
-dfu-util: Cannot open DFU device 28e9:0189
+3) dfu-util: Cannot open DFU device 28e9:0189
 
 On Linux, indicates a need to add a rule to udev. Either create a new file in /etc/udev/rules.d or add to an existing one if you already have stuff for other dfu (e.g. betaflight FC controllers)
 
