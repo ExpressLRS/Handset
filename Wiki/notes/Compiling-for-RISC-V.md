@@ -51,7 +51,7 @@ see https://community.platformio.org/t/dfu-suffix-not-found-for-longan-nano-buil
 
 On Linux, indicates a need to add a rule to udev. Either create a new file in /etc/udev/rules.d or add to an existing one if you already have stuff for other dfu (e.g. betaflight FC controllers)
 
-ACTION=="add", SUBSYSTEM=="usb", ATTRS{idVendor}=="28e9", ATTRS{idProduct}=="0189", MODE="0666", GROUP="whichever group you want to use for dfu access"
+ACTION=="add", SUBSYSTEM=="usb", ATTRS{idVendor}=="28e9", ATTRS{idProduct}=="0189", MODE="0664", GROUP="whichever group you want to use for dfu access"
   
 I just use my main userid group for access rather than going to the trouble of adding a special one for dfu.
 
