@@ -1,0 +1,68 @@
+#pragma once
+
+// This file holds user configurable settings. Copy it to user_config.h and it won't be
+// overwritten by future pulls from git.
+
+#include "config_constants.h"
+
+// ---------------------------------------------------------------
+
+// Binding code (as printed at the start of the build of the ELRS rx)
+// Dynamic binding and binding phrases are not supported.
+#define MY_UID 0,1,2,3,4,5
+
+
+// TODO make this runtime selectable from menus instead of having to rebuild and flash
+// Uncomment for setting up the gimbals
+// #define STICK_CALIBRATION
+
+
+// Compatibility with ELRS. If not defined, runs in experimental mode which needs modified RX and BF firmware.
+// Available constants for supported ELRS levels are in config_constants.h
+#define ELRS_OG_COMPATIBILITY COMPAT_LEVEL_1_0_0_RC3
+
+
+// TODO make this runtime dynamic
+// define the type of radio module being used 
+
+// #define RADIO_E28_12    // CAREFUL - this will break _20 and _27 if you use it by accident
+#define RADIO_E28_20
+// #define RADIO_E28_27    // Slightly careful - this goes 2 steps higher than E28_20. Probably won't break anything, but not ideal
+
+
+// Channel mapping and calibration
+
+// NB Every set of gimbals is different, you'll need to run the calibration mode and replace these values with
+// those for your gimbals!
+
+// For each channel, define the corresponding ADC index (as shown in the calibration display)
+// A = aeleron (roll)
+// E = elevator (pitch)
+// T = throttle
+// R = rudder (yaw)
+#define ADC_A_CH 3
+#define ADC_E_CH 2
+#define ADC_T_CH 0
+#define ADC_R_CH 1
+
+#define ADC_PITCH_REVERSED true
+#define ADC_PITCH_MIN 868u
+#define ADC_PITCH_CTR 2443u
+#define ADC_PITCH_MAX 3890u
+
+#define ADC_ROLL_REVERSED false
+#define ADC_ROLL_MIN 298u
+#define ADC_ROLL_CTR 1775u
+#define ADC_ROLL_MAX 3366u
+
+#define ADC_THROTTLE_REVERSED false
+#define ADC_THROTTLE_MIN 829u
+// throttle doesn't need a CTR value
+#define ADC_THROTTLE_MAX 3614u
+
+#define ADC_YAW_REVERSED true
+#define ADC_YAW_MIN 741u
+#define ADC_YAW_CTR 1676u
+#define ADC_YAW_MAX 3335u
+
+
