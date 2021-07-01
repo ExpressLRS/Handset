@@ -10,8 +10,7 @@
 
 // Next:
 //    UI improvements
-//    Stick calibration
-//    Auto power limit when disarmed - or full dynamic power?
+//    Better stick calibration
 
 //    msp for vtx channel?
    // Info from BF msp.c:
@@ -25,11 +24,7 @@
 #define DEBUG_SUPPRESS
 
 // Uncomment to enable some debug output on the LCD
-// #define DEBUG_STATUS
-
-// uncomment for setting up the gimbals
-// #define STICK_CALIBRATION
-
+#define DEBUG_STATUS
 
 extern "C" {
 
