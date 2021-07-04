@@ -74,6 +74,17 @@ void DoublePT1filterInt::setK(const uint32_t newK)
     k = newK;
 }
 
+/** Calculate and set k
+ *  @param cuttoffFreq - frequency in Hz
+ *  @param sampleRate - the rate at which the filter will be updated in Hz
+ * 
+ */
+void DoublePT1filterInt::setCutoffHz(const float cuttoffFreq, const float sampleRate)
+{
+    const uint32_t k = cuttoffFreq * TWO_PI_SHIFTED / sampleRate;
+    this->setK(k);
+}
+
 uint32_t DoublePT1filterInt::getK()
 {
     return k;

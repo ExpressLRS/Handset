@@ -55,6 +55,7 @@ public:
     int32_t update(const int32_t x);
     uint32_t getK();
     void setK(const uint32_t newK);
+    void setCutoffHz(const float cuttoffFreq, const float sampleRate);
     int32_t getCurrent();
     void setInitial(const int32_t x);
 };

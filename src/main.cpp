@@ -1,6 +1,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 #include "config.h"
 #include "utils.h"
 #include "SX1280.h"
@@ -24,7 +25,13 @@
 #define DEBUG_SUPPRESS
 
 // Uncomment to enable some debug output on the LCD
-#define DEBUG_STATUS
+// #define DEBUG_STATUS
+
+// The threshold at which the TX power will be increased
+#define DYN_POWER_MIN_RSSI -85
+
+// The threshold at which the TX power will be decreased
+#define DYN_POWER_MAX_RSSI -70
 
 extern "C" {
 
@@ -80,6 +87,9 @@ uint8_t currentSwitches[MAX_SWITCHES] = {SWITCH_LOW};
 uint8_t sentSwitches[MAX_SWITCHES] = {SWITCH_LOW};
 
 uint8_t nextSwitchIndex = 0; // for round-robin sequential switches
+
+// flag to indicate that we need to change radio power when it's next safe to do so
+bool pendingPowerChange = false;
 
 
 // Methods that need to be callable from the C interrupt handlers
@@ -187,6 +197,10 @@ int radioPower = -10; // default for e28-27 (50mW)
 // int radioPower = 12; // dBm. Testing with e28-12
 // gnice-27 max is 13
 
+#ifdef USE_DYNAMIC_POWER
+DoublePT1filterInt rssiFilter;
+#endif
+
 
 #define RX_CONNECTION_LOST_TIMEOUT 3000 // Time in ms of no TLM response to consider that we have lost connection
 
@@ -241,6 +255,12 @@ void TIMER2_IRQHandler(void)
       tLast = now;
 
       NonceTX++; // New - just increment the nonce on every frame
+
+      if (pendingPowerChange)
+      {
+         pendingPowerChange = false;
+         radio.SetOutputPower(radioPower);
+      }
 
       #ifdef ELRS_OG_COMPATIBILITY
 
@@ -601,6 +621,36 @@ void ProcessTLMpacket()
       snr = radio.RXdataBuffer[4];
       lq = radio.RXdataBuffer[5];
       // printf("T: %d %u %u\n\r", rssi, snr, lq);
+
+      #ifdef USE_DYNAMIC_POWER
+
+      // use rssi * 100 in the filter for greater resolution
+
+      int32_t rssiF;
+      if (((int32_t)rssi * 100) < rssiFilter.getCurrent()) {
+         // when things are getting worse, just jam the new value into the filter
+         rssiFilter.setInitial(rssi * 100);
+         rssiF = rssiFilter.getCurrent();
+      } else {
+         // things are getting better, use the filter normally
+         rssiF = rssiFilter.update(rssi * 100);
+      }
+
+      // printf("rssi %d, filtered %ld\n\r", rssi, rssiF);
+
+      if ((rssiF < DYN_POWER_MIN_RSSI * 100) && (radio.currPWR < radioPower)) 
+      {
+         radio.SetOutputPower(radio.currPWR + 1);
+         // printf("rssi %d rssiF %ld power up! %d\n\r", rssi, rssiF, radio.currPWR);
+
+      } else if ((rssiF > DYN_POWER_MAX_RSSI * 100) && (radio.currPWR > -18)) // XXX constant for min power
+      {
+         radio.SetOutputPower(radio.currPWR - 1);
+         // printf("rssi %d rssiF %ld power down! %d\n\r", rssi, rssiF, radio.currPWR);
+      }
+
+      #endif // USE_DYNAMIC_POWER
+
    } else {
       #ifndef DEBUG_SUPPRESS
       printf("TLMheader wrong %u\n\r", TLMheader);
@@ -1835,6 +1885,40 @@ void runSafetyChecks()
 
 }
 
+void updateDynPowerFilter()
+{
+   #ifdef USE_DYNAMIC_POWER
+   const uint8_t tlmRatio = TLMratioEnumToValue(ExpressLRS_currAirRate_Modparams->TLMinterval);
+
+   if (tlmRatio == 0) {
+      // we can't make any sensible update to the filter with an expected update freq of 0
+      return;
+   }
+
+   const float packetRate = 1000000.0f / (float)ExpressLRS_currAirRate_Modparams->interval;
+   const float updateRate = packetRate / tlmRatio;
+   float cutOffHz = 0.5f;
+
+   // if the filter cutoff is too large a fraction of the update rate the filter becomes unstable
+   if (cutOffHz > (updateRate/8.0f)) {
+      cutOffHz = updateRate/8.0f;
+   }
+
+   rssiFilter.setCutoffHz(cutOffHz, updateRate);
+
+   // debug
+
+   // int cutOffHzD = floorf(cutOffHz);
+   // int cutOffHzF = (cutOffHz * 100) - (cutOffHzD * 100);
+
+   // int updateRateD = floorf(updateRate);
+   // int updateRateF = (updateRate * 100) - (updateRateD * 100);
+
+   // printf("setting up filter for cutoff %d.%02d, update %d.%02d\n\r", cutOffHzD, cutOffHzF, updateRateD, updateRateF);
+
+   #endif // USE_DYNAMIC_POWER
+}
+
 
 // ============================
 
@@ -1922,9 +2006,12 @@ int main(void)
 
    SetRFLinkRate(linkRateIndex);
 
+   #ifdef USE_DYNAMIC_POWER
+   updateDynPowerFilter();
+   #endif
+
    // enable the timer for the tx interrupt
    timer_enable(TIMER2);
-
 
    // === Next section is the event loop ===
 
@@ -2123,9 +2210,11 @@ int main(void)
                      #else
                      SetRFLinkRate((encValue - 100) / 2);
                      #endif // ELRS_OG_COMPATIBILITY
+                     updateDynPowerFilter();
                      break;
                   case PARAM_TLM_INT:
                      ExpressLRS_currAirRate_Modparams->TLMinterval = (expresslrs_tlm_ratio_e)((encValue - 100) / 2);
+                     updateDynPowerFilter();
                      break;
                   case PARAM_FILTER_MODE:
                      currentFilterMode = (encValue - 100) / 2;
@@ -2149,6 +2238,7 @@ int main(void)
       if (isRXconnected && ((millis() - localLastTelem) > RX_CONNECTION_LOST_TIMEOUT))
       {
          isRXconnected = false;
+         if (statusIsArmed) pendingPowerChange = true; // will trigger the timer ISR to set the output power
       }
 
       // update LCD
