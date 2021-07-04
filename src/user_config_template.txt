@@ -14,11 +14,21 @@
 
 // TODO make this runtime selectable from menus instead of having to rebuild and flash
 // Uncomment for setting up the gimbals
+
 // #define STICK_CALIBRATION
+
+
+// Dynamic power automatically adjusts the power depending on the RSSI reported by telemetry
+// The power set in the handset menu becomes the max power when this is used. If telemetry
+// is disabled (or the quad goes out of telem range) then the max power is used, i.e. it 
+// should behave the same as it used to without dynamic power.
+
+// #define USE_DYNAMIC_POWER
 
 
 // Compatibility with ELRS. If not defined, runs in experimental mode which needs modified RX and BF firmware.
 // Available constants for supported ELRS levels are in config_constants.h
+
 #define ELRS_OG_COMPATIBILITY COMPAT_LEVEL_1_0_0_RC3
 
 
