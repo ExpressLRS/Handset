@@ -288,6 +288,12 @@ void TIMER2_IRQHandler(void)
 
       NonceTX++; // New - just increment the nonce on every frame
 
+      if (pendingPowerChange)
+      {
+         pendingPowerChange = false;
+         radio.SetOutputPower(radioPower);
+      }
+
       #ifdef ELRS_OG_COMPATIBILITY
 
       HandleFHSS(); // experimental - can we do fhss here?
@@ -2330,6 +2336,7 @@ int main(void)
       if (isRXconnected && ((millis() - localLastTelem) > RX_CONNECTION_LOST_TIMEOUT))
       {
          isRXconnected = false;
+         if (statusIsArmed) pendingPowerChange = true; // will trigger the timer ISR to set the output power
       }
 
       // update LCD
