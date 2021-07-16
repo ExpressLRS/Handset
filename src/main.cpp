@@ -27,11 +27,34 @@
 // Uncomment to enable some debug output on the LCD
 // #define DEBUG_STATUS
 
-// The threshold at which the TX power will be increased
-#define DYN_POWER_MIN_RSSI -85
+// The RSSI dB delta relative to the rx sensitivity at which the TX power will be increased
+// So if the RXsensitivity is -105 and DYN_POWER_INCREASE_MARGIN is 15, power will be increase
+// if rssi is below -90
+#define DYN_POWER_INCREASE_MARGIN 15
 
-// The threshold at which the TX power will be decreased
-#define DYN_POWER_MAX_RSSI -70
+// The RSSI dB delta above DYN_POWER_INCREASE_MARGIN at which the TX power will be decreased
+// If RXsensitivity is -105, DYN_POWER_INCREASE_MARGIN is 15 and DYN_POWER_DECREASE_MARGIN is 10
+// then power will be decreased when rssi is above -80 (105-15 = -90, then 10 above that is -80)
+#define DYN_POWER_DECREASE_MARGIN 10
+
+// The LQ below which the power will be increased to improve the link. The same value is used
+// to prevent power being decreased even if the rssi is strong.
+#define DYN_POWER_LQ_THRESHOLD 90
+
+// The LQ below which the power will be increased directly to the configured max value
+#define DYN_POWER_LQ_PANIC_THRESHOLD 50
+
+// The number of consecutive missed telemetry packets to trigger full tx power
+#define DYN_POWER_MISSED_TELEM_PACKET_THRESHOLD 4
+
+#define DYN_POWER_RSSI_FILTER_CUTOFF_HZ 0.1f
+
+#ifndef ELRS_OG_COMPATIBILITY
+
+// This needs modified RX code to work
+#define SEND_TX_POWER_IN_SYNC
+
+#endif
 
 extern "C" {
 
@@ -88,8 +111,15 @@ uint8_t sentSwitches[MAX_SWITCHES] = {SWITCH_LOW};
 
 uint8_t nextSwitchIndex = 0; // for round-robin sequential switches
 
-// flag to indicate that we need to change radio power when it's next safe to do so
-bool pendingPowerChange = false;
+// flag to indicate that we're expecting a telemetry packet
+bool waitingForTelemetry = false;
+
+// count of how many consecutive telemetry packets have been missed
+uint8_t missedTelemetryPackets = 0;
+
+// rssi thresholds for dynamic power increase and decrease
+int16_t dynamicPowerRSSIIncreaseThreshold;
+int16_t dynamicPowerRSSIDecreaseThreshold;
 
 
 // Methods that need to be callable from the C interrupt handlers
@@ -233,6 +263,8 @@ GENERIC_CRC14 ota_crc(ELRS_CRC14_POLY);
 GENERIC_CRC8 ota_crc(ELRS_CRC_POLY);
 #endif
 
+bool thisFrameIsTelemetry();
+bool isArmed();
 
 
 // ======== Interrupt Handlers ============
@@ -256,12 +288,6 @@ void TIMER2_IRQHandler(void)
 
       NonceTX++; // New - just increment the nonce on every frame
 
-      if (pendingPowerChange)
-      {
-         pendingPowerChange = false;
-         radio.SetOutputPower(radioPower);
-      }
-
       #ifdef ELRS_OG_COMPATIBILITY
 
       HandleFHSS(); // experimental - can we do fhss here?
@@ -278,7 +304,29 @@ void TIMER2_IRQHandler(void)
       // fhss is in txdone
       #endif // ELRS_OG_COMPATIBILITY
 
-      SendRCdataToRF();
+      // Check if we're due for a telemetry packet
+      if (((uint8_t)ExpressLRS_currAirRate_Modparams->TLMinterval > 0) && thisFrameIsTelemetry())
+      {
+         // This frame is for telem, so don't attempt to transmit
+         // The rx was started from the txdone isr, so nothing to do here
+
+      } else {
+         // This is a normal RC frame. We don't expect to still be waiting for telemetry when we get here
+         if (waitingForTelemetry) {
+            missedTelemetryPackets++;
+            waitingForTelemetry = false;
+         }
+
+         if ((missedTelemetryPackets > DYN_POWER_MISSED_TELEM_PACKET_THRESHOLD) && (radio.currPWR < radioPower) && isArmed())
+         {
+            // We didn't get telemetry packets so we have no rssi/lq info for dynamic power
+            // Switch to the full configured tx power
+            missedTelemetryPackets = 0;
+            radio.SetOutputPower(radioPower);
+         }
+
+         SendRCdataToRF();
+      }
    }
 }
 
@@ -617,6 +665,10 @@ void ProcessTLMpacket()
    if (TLMheader == CRSF_FRAMETYPE_LINK_STATISTICS)
    #endif
    {
+      // clear the flag and reset the counter
+      waitingForTelemetry = false;
+      missedTelemetryPackets = 0;
+
       rssi = radio.RXdataBuffer[2];
       snr = radio.RXdataBuffer[4];
       lq = radio.RXdataBuffer[5];
@@ -627,7 +679,8 @@ void ProcessTLMpacket()
       // use rssi * 100 in the filter for greater resolution
 
       int32_t rssiF;
-      if (((int32_t)rssi * 100) < rssiFilter.getCurrent()) {
+      if (((int32_t)rssi * 100) < rssiFilter.getCurrent())
+      {
          // when things are getting worse, just jam the new value into the filter
          rssiFilter.setInitial(rssi * 100);
          rssiF = rssiFilter.getCurrent();
@@ -638,12 +691,25 @@ void ProcessTLMpacket()
 
       // printf("rssi %d, filtered %ld\n\r", rssi, rssiF);
 
-      if ((rssiF < DYN_POWER_MIN_RSSI * 100) && (radio.currPWR < radioPower)) 
+      // Order of tests is important for lq vs max rssi conditions since both could evaluate true and if
+      // so we want the LQ test to take priority. The tests are therefore in priority order, highest to
+      // lowest
+
+      if ((lq < DYN_POWER_LQ_PANIC_THRESHOLD) && (radio.currPWR < radioPower)) {
+         // Panic time, take the power directly to the configured max
+         radio.SetOutputPower(radioPower);
+      }
+      else if ((rssiF < dynamicPowerRSSIIncreaseThreshold * 100) && (radio.currPWR < radioPower))
       {
          radio.SetOutputPower(radio.currPWR + 1);
          // printf("rssi %d rssiF %ld power up! %d\n\r", rssi, rssiF, radio.currPWR);
-
-      } else if ((rssiF > DYN_POWER_MAX_RSSI * 100) && (radio.currPWR > -18)) // XXX constant for min power
+      }
+      else if ((lq < DYN_POWER_LQ_THRESHOLD) && (radio.currPWR < radioPower))
+      {
+         // If we're losing packets it's worth boosting power even if the rssi is better than the threshold
+         radio.SetOutputPower(radio.currPWR + 1);
+      }
+      else if ((rssiF > dynamicPowerRSSIDecreaseThreshold * 100) && (radio.currPWR > -18)) // XXX find/add a constant for min power
       {
          radio.SetOutputPower(radio.currPWR - 1);
          // printf("rssi %d rssiF %ld power down! %d\n\r", rssi, rssiF, radio.currPWR);
@@ -691,7 +757,7 @@ void HandleTLM()
          //  printf("starting rx\n\r");
          // gpio_bit_set(LED_GPIO_PORT, LED_PIN); // for debugging, set the led pin high when listening
          radio.RXnb();
-         // WaitRXresponse = true;
+         waitingForTelemetry = true;
       }
    }
 }
@@ -747,11 +813,32 @@ void GenerateSyncPacketData()
    uint8_t TLMrate = (ExpressLRS_currAirRate_Modparams->TLMinterval & 0b111);
    radio.TXdataBuffer[3] = (Index << 6) + (TLMrate << 3) + (SwitchEncMode << 1);
 
+   radio.TXdataBuffer[4] = UID[3];
+
    #else // not ELRS_OG_COMPATIBILITY
    radio.TXdataBuffer[3] = ((ExpressLRS_currAirRate_Modparams->index & 0b111) << 5) + ((ExpressLRS_currAirRate_Modparams->TLMinterval & 0b111) << 2);
-   #endif // ELRS_OG_COMPATIBILITY
+
+   #ifdef SEND_TX_POWER_IN_SYNC
+
+   int8_t adjustedDBM = radio.currPWR;
+   #if defined(RADIO_E28_27)
+   // for e28-27, PA output is +27dBm of the pre-PA setting, up to a max of 0 input.
+   adjustedDBM += 27;
+   #elif defined(RADIO_E28_20)
+   // for e28-20, PA output is +22dBm of the pre-PA setting, up to a max of -2 input.
+   adjustedDBM += 22;
+   #endif
+
+   radio.TXdataBuffer[4] = adjustedDBM;
+
+   #else // not sending tx power, send UID[3] as before
 
    radio.TXdataBuffer[4] = UID[3];
+
+   #endif // SEND_TX_POWER_IN_SYNC
+
+   #endif // ELRS_OG_COMPATIBILITY
+
    radio.TXdataBuffer[5] = UID[4];
    radio.TXdataBuffer[6] = UID[5];
 }
@@ -1334,12 +1421,6 @@ uint32_t scaleRollData(uint16_t raw_adc_roll)
 void ICACHE_RAM_ATTR SendRCdataToRF()
 {
    // printf("n %u\n\r", NonceTX);
-   /////// This Part Handles the Telemetry Response ///////
-   if (((uint8_t)ExpressLRS_currAirRate_Modparams->TLMinterval > 0) && thisFrameIsTelemetry())
-   { // This frame is for telem, so don't attempt to transmit
-      // printf("t skip\n\r");
-      return;
-   }
 
   uint32_t SyncInterval;
   if (isRXconnected)
@@ -1526,6 +1607,12 @@ void SetRFLinkRate(uint8_t index)
    ExpressLRS_currAirRate_RFperfParams = RFperf;
 
    isRXconnected = false;
+
+   #ifdef USE_DYNAMIC_POWER
+   // The dynamic power thresholds are relative to the rx sensitivity, so need to be updated
+   dynamicPowerRSSIIncreaseThreshold = RFperf->RXsensitivity + DYN_POWER_INCREASE_MARGIN;
+   dynamicPowerRSSIDecreaseThreshold = dynamicPowerRSSIIncreaseThreshold + DYN_POWER_DECREASE_MARGIN;
+   #endif
 
    // if (UpdateRFparamReq)
    //    UpdateRFparamReq = false;
@@ -1885,6 +1972,11 @@ void runSafetyChecks()
 
 }
 
+/** Update the filter to match changes in the rate of telemetry packets
+ * If either the telemetry interval or the packet rate change then the rate at
+ * which the filter gets updated will change, and the filter needs to be reconfigured
+ * to match.
+ */
 void updateDynPowerFilter()
 {
    #ifdef USE_DYNAMIC_POWER
@@ -1897,7 +1989,7 @@ void updateDynPowerFilter()
 
    const float packetRate = 1000000.0f / (float)ExpressLRS_currAirRate_Modparams->interval;
    const float updateRate = packetRate / tlmRatio;
-   float cutOffHz = 0.5f;
+   float cutOffHz = DYN_POWER_RSSI_FILTER_CUTOFF_HZ;
 
    // if the filter cutoff is too large a fraction of the update rate the filter becomes unstable
    if (cutOffHz > (updateRate/8.0f)) {
@@ -2238,7 +2330,6 @@ int main(void)
       if (isRXconnected && ((millis() - localLastTelem) > RX_CONNECTION_LOST_TIMEOUT))
       {
          isRXconnected = false;
-         if (statusIsArmed) pendingPowerChange = true; // will trigger the timer ISR to set the output power
       }
 
       // update LCD
