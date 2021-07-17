@@ -1,6 +1,7 @@
 #pragma once
 
 // constants for the supported compatibility levels
+#define COMPAT_LEVEL_1_0_0     (2)  // V1.0.0 equivalent to RC3. Likely all RC >= 2 were compatible OTA
 #define COMPAT_LEVEL_1_0_0_RC3 (2)  // RC2 and RC3 are equivalent
 #define COMPAT_LEVEL_1_0_0_RC2 (2)
 #define COMPAT_LEVEL_DEV_16fbd1d011d060f56dcc9b3a33d9eead819cf440 (1)
