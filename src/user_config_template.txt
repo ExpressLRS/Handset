@@ -29,7 +29,7 @@
 // Compatibility with ELRS. If not defined, runs in experimental mode which needs modified RX and BF firmware.
 // Available constants for supported ELRS levels are in config_constants.h
 
-#define ELRS_OG_COMPATIBILITY COMPAT_LEVEL_1_0_0_RC3
+#define ELRS_OG_COMPATIBILITY COMPAT_LEVEL_1_0_0
 
 
 // TODO make this runtime dynamic
