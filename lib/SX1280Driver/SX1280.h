@@ -3,8 +3,20 @@
 // #include "../../src/targets.h"
 #include "SX1280_Regs.h"
 #include "SX1280_hal.h"
+#include "../../src/user_config.h"
 
 #include <stdint.h>
+
+#if defined(USE_HIRES_DATA) && defined(ELRS_OG_COMPATIBILITY)
+#error "Can't use hires data in compatibility mode (yet)"
+#endif
+
+#if defined(USE_HIRES_DATA)
+#define OTA_PACKET_LENGTH 9
+#else
+#define OTA_PACKET_LENGTH 8
+#endif // USE_HIRES_DATA
+
 
 #define ICACHE_RAM_ATTR
 

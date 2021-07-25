@@ -80,10 +80,9 @@ typedef enum
     RATE_250HZ = 3,
     RATE_200HZ = 4,
     RATE_150HZ = 5,
-    RATE_100HZ = 6,
-    RATE_50HZ = 7,
-    RATE_25HZ = 8,
-    RATE_4HZ = 9
+    RATE_125HZ = 6,
+    RATE_100HZ = 7,
+    RATE_50HZ  = 8,
 } expresslrs_RFrates_e; // Max value of 16 since only 4 bits have been assigned in the sync package.
 #endif // ELRS_OG_COMPATIBILITY
 
@@ -125,8 +124,15 @@ typedef struct expresslrs_mod_settings_s
 #define RATE_MAX 4  // actually the number of rates, so the max value is RATE_MAX-1
 #define RATE_DEFAULT 0
 #else
+
+#ifdef USE_HIRES_DATA
+#define RATE_MAX 4  // actually the number of rates, so the max value is RATE_MAX-1
+#define RATE_DEFAULT 1
+#else
 #define RATE_MAX 6  // actually the number of rates, so the max value is RATE_MAX-1
 #define RATE_DEFAULT 2
+#endif // USE_HIRES_DATA
+
 #endif // ELRS_OG_COMPATIBILITY
 
 typedef struct expresslrs_mod_settings_s

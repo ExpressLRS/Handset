@@ -31,6 +31,8 @@
 
 #define ELRS_OG_COMPATIBILITY COMPAT_LEVEL_1_0_0
 
+// Use high resolution gimbal data. Requires modified RX and Betaflight firmwares
+#define USE_HIRES_DATA
 
 // TODO make this runtime dynamic
 // define the type of radio module being used 
