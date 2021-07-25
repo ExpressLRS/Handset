@@ -260,7 +260,7 @@ bool lcdRedrawNeeded = false;
 
 #include "crc.h"
 
-#if (ELRS_OG_COMPATIBILITY == COMPAT_LEVEL_1_0_0_RC2)
+#if (ELRS_OG_COMPATIBILITY == COMPAT_LEVEL_1_0_0_RC2) || defined(USE_CRC14)
 GENERIC_CRC14 ota_crc(ELRS_CRC14_POLY);
 #elif defined(ELRS_OG_COMPATIBILITY)
 GENERIC_CRC8 ota_crc(ELRS_CRC_POLY);
@@ -614,18 +614,25 @@ void ProcessTLMpacket()
    printf("TLMpacket\n\r");
    #endif
 
-   #if (ELRS_OG_COMPATIBILITY == COMPAT_LEVEL_1_0_0_RC2)
+   #if (ELRS_OG_COMPATIBILITY == COMPAT_LEVEL_1_0_0_RC2) || defined(USE_CRC14)
+
    uint16_t inCRC = radio.RXdataBuffer[0] & 0b11111100;
-   inCRC = (inCRC << 6) + radio.RXdataBuffer[7];
+   inCRC = (inCRC << 6) + radio.RXdataBuffer[OTA_PACKET_LENGTH-1];
    radio.RXdataBuffer[0] &= 0b11;   // remove the OTA crc bits before calculating the crc
-   uint16_t calculatedCRC = ota_crc.calc(radio.RXdataBuffer, 7);
+   uint16_t calculatedCRC = ota_crc.calc(radio.RXdataBuffer, OTA_PACKET_LENGTH-1);
+
    #elif (ELRS_OG_COMPATIBILITY == COMPAT_LEVEL_DEV_16fbd1d011d060f56dcc9b3a33d9eead819cf440)
+   // TODO drop this compat level at some point
+
    uint8_t calculatedCRC = ota_crc.calc(radio.RXdataBuffer, 7) + CRCCaesarCipher;
    uint8_t inCRC = radio.RXdataBuffer[7];
-   #else // not ELRS_OG_COMPATIBILITY
+
+   #else // native mode with old CRC
+
    uint8_t calculatedCRC = CalcCRC(radio.RXdataBuffer, OTA_PACKET_LENGTH-1) + CRCCaesarCipher;
    uint8_t inCRC = radio.RXdataBuffer[OTA_PACKET_LENGTH-1];
-   #endif // ELRS_OG_COMPATIBILITY
+
+   #endif // CRC14 vs CRC8
 
    if ((inCRC != calculatedCRC))
    {
@@ -635,10 +642,10 @@ void ProcessTLMpacket()
       return;
    }
 
-   uint8_t type = radio.RXdataBuffer[0] & TLM_PACKET;
+   uint8_t type = radio.RXdataBuffer[0] & 0b11;
    uint8_t TLMheader = radio.RXdataBuffer[1];
 
-   #if (ELRS_OG_COMPATIBILITY != COMPAT_LEVEL_1_0_0_RC2) // no packetAddr from V1 onwards
+   #if !((ELRS_OG_COMPATIBILITY == COMPAT_LEVEL_1_0_0_RC2) || defined(USE_CRC14)) // no packetAddr when using crc14
    uint8_t packetAddr = (radio.RXdataBuffer[0] & 0b11111100) >> 2;
    if (packetAddr != DeviceAddr)
    {
@@ -1596,23 +1603,22 @@ void ICACHE_RAM_ATTR SendRCdataToRF()
 
    ///// Next, Calculate the CRC and put it into the buffer /////
 
-   #if (ELRS_OG_COMPATIBILITY == COMPAT_LEVEL_1_0_0_RC2)
+   #if (ELRS_OG_COMPATIBILITY == COMPAT_LEVEL_1_0_0_RC2) || defined(USE_CRC14)
 
    // need to clear the crc bits of the first byte before calculating the crc
    radio.TXdataBuffer[0] &= 0b11;
 
-   uint16_t crc = ota_crc.calc(radio.TXdataBuffer, 7);
+   uint16_t crc = ota_crc.calc(radio.TXdataBuffer, OTA_PACKET_LENGTH-1);
    radio.TXdataBuffer[0] |= (crc >> 6) & 0b11111100;
-   radio.TXdataBuffer[7] = crc & 0xFF;
+   radio.TXdataBuffer[OTA_PACKET_LENGTH-1] = crc & 0xFF;
 
    #elif (ELRS_OG_COMPATIBILITY == COMPAT_LEVEL_DEV_16fbd1d011d060f56dcc9b3a33d9eead819cf440)
 
    uint8_t crc = ota_crc.calc(radio.TXdataBuffer, 7) + CRCCaesarCipher;
    radio.TXdataBuffer[7] = crc;
 
-   #else // not ELRS_OG_COMPATIBILITY
-
-   // TODO change to crc14
+   #else // native mode using old 8 bit crc
+   // TODO XXX remove this option once crc14 is well tested
    uint8_t crc = CalcCRC(radio.TXdataBuffer, OTA_PACKET_LENGTH-1) + CRCCaesarCipher;
    radio.TXdataBuffer[OTA_PACKET_LENGTH-1] = crc;
 
