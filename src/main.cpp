@@ -28,18 +28,18 @@
 // #define DEBUG_STATUS
 
 // The RSSI dB delta relative to the rx sensitivity at which the TX power will be increased
-// So if the RXsensitivity is -105 and DYN_POWER_INCREASE_MARGIN is 15, power will be increase
-// if rssi is below -90
-#define DYN_POWER_INCREASE_MARGIN 15
+// So if the RXsensitivity is -105 and DYN_POWER_INCREASE_MARGIN is 25, power will be increased
+// if rssi is below -80
+#define DYN_POWER_INCREASE_MARGIN 23
 
 // The RSSI dB delta above DYN_POWER_INCREASE_MARGIN at which the TX power will be decreased
-// If RXsensitivity is -105, DYN_POWER_INCREASE_MARGIN is 15 and DYN_POWER_DECREASE_MARGIN is 10
-// then power will be decreased when rssi is above -80 (105-15 = -90, then 10 above that is -80)
+// If RXsensitivity is -105, DYN_POWER_INCREASE_MARGIN is 25 and DYN_POWER_DECREASE_MARGIN is 10
+// then power will be decreased when rssi is above -70 (105-25 = -80, then 10 above that is -70)
 #define DYN_POWER_DECREASE_MARGIN 10
 
 // The LQ below which the power will be increased to improve the link. The same value is used
 // to prevent power being decreased even if the rssi is strong.
-#define DYN_POWER_LQ_THRESHOLD 90
+#define DYN_POWER_LQ_THRESHOLD 95
 
 // The LQ below which the power will be increased directly to the configured max value
 #define DYN_POWER_LQ_PANIC_THRESHOLD 50
@@ -49,12 +49,13 @@
 
 #define DYN_POWER_RSSI_FILTER_CUTOFF_HZ 0.1f
 
+
 #ifndef ELRS_OG_COMPATIBILITY
 
 // This needs modified RX code to work
 #define SEND_TX_POWER_IN_SYNC
 
-#endif
+#endif // ELRS_OG_COMPATIBILITY
 
 extern "C" {
 
@@ -76,6 +77,8 @@ extern "C" {
 #define MSP_DATA_PACKET 0b01
 #define SYNC_PACKET     0b10
 #define TLM_PACKET      0b11
+#define RC_HIRES_DATA   0b11  // NB Same as TLM_PACKET since we don't use that value for TX -> RX packets
+
 
 #define CRSF_FRAMETYPE_LINK_STATISTICS 0x14
 
@@ -620,8 +623,8 @@ void ProcessTLMpacket()
    uint8_t calculatedCRC = ota_crc.calc(radio.RXdataBuffer, 7) + CRCCaesarCipher;
    uint8_t inCRC = radio.RXdataBuffer[7];
    #else // not ELRS_OG_COMPATIBILITY
-   uint8_t calculatedCRC = CalcCRC(radio.RXdataBuffer, 7) + CRCCaesarCipher;
-   uint8_t inCRC = radio.RXdataBuffer[7];
+   uint8_t calculatedCRC = CalcCRC(radio.RXdataBuffer, OTA_PACKET_LENGTH-1) + CRCCaesarCipher;
+   uint8_t inCRC = radio.RXdataBuffer[OTA_PACKET_LENGTH-1];
    #endif // ELRS_OG_COMPATIBILITY
 
    if ((inCRC != calculatedCRC))
@@ -1276,7 +1279,6 @@ void blink(uint32_t port, uint32_t pin)
  * Inputs: crsf.ChannelDataIn, crsf.currentSwitches
  * Outputs: Radio.TXdataBuffer, side-effects the sentSwitch value
  */
-#define RC_DATA_PACKET 0b00
 
 void ICACHE_RAM_ATTR GenerateChannelDataHybridSwitch8(volatile uint8_t* Buffer, uint16_t *adcData, uint8_t addr)
 {
@@ -1351,10 +1353,50 @@ void ICACHE_RAM_ATTR GenerateChannelDataHybridSwitch8(volatile uint8_t* Buffer, 
    setSentSwitch(nextSwitchIndex, sentValue);
 }
 
+/** Send 12 bit gimbal data
+ * 
+ */
+void ICACHE_RAM_ATTR GenerateHiResChannelData(volatile uint8_t* Buffer, uint16_t *adcData, uint8_t addr)
+{
+   uint8_t PacketHeaderAddr;
+   PacketHeaderAddr = (addr << 2) | RC_HIRES_DATA;
+   Buffer[0] = PacketHeaderAddr;
+   Buffer[1] = ((adcData[0]) >> 4);
+   Buffer[2] = ((adcData[1]) >> 4);
+   Buffer[3] = ((adcData[2]) >> 4);
+   Buffer[4] = ((adcData[3]) >> 4);
+   Buffer[5] = ((adcData[0] & 0b1111) << 4) | (adcData[1] & 0b1111);
+   Buffer[6] = ((adcData[2] & 0b1111) << 4) | (adcData[3] & 0b1111);
+
+   // switch 0 is sent on every packet - intended for low latency arm/disarm
+   Buffer[7] = (currentSwitches[0] & 0b11) << 5; // note this leaves the top bit of byte 7 unused
+
+   // find the next switch to send
+   uint8_t nextSwitchIndex = getNextSwitchIndex() & 0b111;     // mask for paranoia
+   uint8_t sentValue = currentSwitches[nextSwitchIndex];       // avoid the possibility that the mask changes the value
+   uint8_t value = sentValue & 0b11; // mask for paranoia
+
+   // put the bits into buf[7]. nextSwitchIndex is in the range 1 through 7 so takes 3 bits
+   // currentSwitches[nextSwitchIndex] is in the range 0 through 2, takes 2 bits.
+   Buffer[7] += (nextSwitchIndex << 2) + value;
+
+   // update the sent value
+   setSentSwitch(nextSwitchIndex, sentValue);
+}
+
+
+
+#ifdef USE_HIRES_DATA
+// use a 12 bit clean (full range) encoding
+const static uint32_t MAX_OUT = 4095;
+const static uint32_t MID_OUT = 2047;
+const static uint32_t MIN_OUT =    0;
+#else // not USE_HIRES_DATA
 // crsf uses a reduced range, and BF expects to see it.
 const static uint32_t MAX_OUT = 1811;
 const static uint32_t MID_OUT =  992;
 const static uint32_t MIN_OUT =  172;
+#endif // not USE_HIRES_DATA
 
 uint32_t scaleADCtoCRSF(const uint32_t min, const uint32_t centre, const uint32_t max, 
                         const uint32_t adcValue, const bool reversed)
@@ -1380,7 +1422,7 @@ uint32_t scaleADCtoCRSF(const uint32_t min, const uint32_t centre, const uint32_
    }
 
    if (reversed) {
-      res = 1983 - res;
+      res = (MAX_OUT + MIN_OUT) - res;
    }
 
    return res;
@@ -1422,6 +1464,8 @@ void ICACHE_RAM_ATTR SendRCdataToRF()
 {
    // printf("n %u\n\r", NonceTX);
 
+   for(int i=0; i<10; i++) radio.TXdataBuffer[i] = i;
+
   uint32_t SyncInterval;
   if (isRXconnected)
   {
@@ -1444,9 +1488,8 @@ void ICACHE_RAM_ATTR SendRCdataToRF()
   {
       GenerateSyncPacketData();
       SyncPacketLastSent = millis();
-
-    //Serial.println("sync");
-    //Serial.println(Radio.currFreq);
+      //Serial.println("sync");
+      //Serial.println(Radio.currFreq);
   }
   else
   {
@@ -1544,7 +1587,11 @@ void ICACHE_RAM_ATTR SendRCdataToRF()
       scaledADC[2] = scaleThrottleData(aud_throttle.getCurrent());
       scaledADC[3] = scaleYawData(aud_yaw.getCurrent());
 
+      #ifdef USE_HIRES_DATA
+      GenerateHiResChannelData(radio.TXdataBuffer, scaledADC, DeviceAddr);
+      #else
       GenerateChannelDataHybridSwitch8(radio.TXdataBuffer, scaledADC, DeviceAddr);
+      #endif
    }
 
    ///// Next, Calculate the CRC and put it into the buffer /////
@@ -1566,16 +1613,15 @@ void ICACHE_RAM_ATTR SendRCdataToRF()
    #else // not ELRS_OG_COMPATIBILITY
 
    // TODO change to crc14
-   uint8_t crc = CalcCRC(radio.TXdataBuffer, 7) + CRCCaesarCipher;
-   radio.TXdataBuffer[7] = crc;
+   uint8_t crc = CalcCRC(radio.TXdataBuffer, OTA_PACKET_LENGTH-1) + CRCCaesarCipher;
+   radio.TXdataBuffer[OTA_PACKET_LENGTH-1] = crc;
 
    #endif // ELRS_OG_COMPATIBILITY
 
 
    // gpio_bit_reset(LED_GPIO_PORT, LED_PIN);  // clear the rx debug pin as we're definitely not listening now
 
-   radio.TXnb(radio.TXdataBuffer, 8);
-
+   radio.TXnb(radio.TXdataBuffer, OTA_PACKET_LENGTH);
 }
 
 // Update the radio and timer for the specified air rate

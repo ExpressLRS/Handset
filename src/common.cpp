@@ -56,6 +56,28 @@ expresslrs_rf_pref_params_s ExpressLRS_AirRateRFperf[RATE_MAX] = {
 
 #else // not ELRS_OG_COMPATIBILITY
 
+#ifdef USE_HIRES_DATA
+
+expresslrs_mod_settings_s ExpressLRS_AirRateConfig[RATE_MAX] = {
+    // enum_rate,       bw,                 sf,                 cr,            interval, TLMinterval, FHSShopInterval, PreambleLen
+    {0, RATE_1KHZ,  SX1280_LORA_BW_1600, SX1280_LORA_SF5, SX1280_LORA_CR_LI_4_5, 1000,  TLM_RATIO_1_128,     8,          12}, // 714us
+    {1, RATE_500HZ, SX1280_LORA_BW_0800, SX1280_LORA_SF5, SX1280_LORA_CR_LI_4_6, 2000,  TLM_RATIO_1_128,     8,          12}, // 1586us, 79%
+    {2, RATE_250HZ, SX1280_LORA_BW_0800, SX1280_LORA_SF6, SX1280_LORA_CR_LI_4_7, 4000,  TLM_RATIO_1_64,      8,          12}, // 3330us, 
+    {3, RATE_125HZ, SX1280_LORA_BW_0800, SX1280_LORA_SF7, SX1280_LORA_CR_LI_4_7, 8000,  TLM_RATIO_1_32,      4,          12}, // 
+
+};
+
+expresslrs_rf_pref_params_s ExpressLRS_AirRateRFperf[RATE_MAX] = {
+    //      rate    sens  TOA RFmodeCycleInterval RFmodeCycleAddtionalTime SyncPktIntervalDisconnected SyncPktIntervalConnected
+    {0, RATE_1KHZ,   -99,  714, 1000,               1000,                       100,                       5000},   // no hw crc
+    {1, RATE_500HZ, -105, 1586, 1000,               1000,                       100,                       5000},
+    {2, RATE_250HZ, -108, 3330, 1000,               1000,                       100,                       5000},
+    {3, RATE_125HZ, -112, 6187, 1000,               4000,                       100,                       5000},   // todo, see if the large RFmodeCycleAddtionalTime can be reduced
+
+};
+
+#else // not USE_HIRES_DATA
+
 expresslrs_mod_settings_s ExpressLRS_AirRateConfig[RATE_MAX] = {
     // enum_rate,       bw,                 sf,                 cr,            interval us, TLMinterval, FHSShopInterval, PreambleLen
     {0, RATE_1KHZ,  SX1280_LORA_BW_1600, SX1280_LORA_SF5, SX1280_LORA_CR_LI_4_5, 1000,  TLM_RATIO_1_128,     8,          12},   // 1000Hz
@@ -91,6 +113,8 @@ expresslrs_rf_pref_params_s ExpressLRS_AirRateRFperf[RATE_MAX] = {
     {3, RATE_250HZ, -108, 3567, 1000,               1000,                       100,                       2000},
     {4, RATE_150HZ, -112, 6660, 1000,               4000,                       100,                       2000},   // todo, see if the large RFmodeCycleAddtionalTime can be reduced
     {5, RATE_50HZ,  -120,12059, 1000,               6000,                       133,                       4000}};
+
+#endif // USE_HIRES_DATA
 
 #endif // ELRS_OG_COMPATIBILITY
 
