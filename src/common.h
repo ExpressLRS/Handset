@@ -165,7 +165,7 @@ extern bool ExpressLRS_AirRateNeedsUpdate;
 
 //ELRS SPECIFIC OTA CRC 
 //Koopman formatting https://users.ece.cmu.edu/~koopman/crc/
-#if (ELRS_OG_COMPATIBILITY == COMPAT_LEVEL_1_0_0_RC2)
+#if (ELRS_OG_COMPATIBILITY == COMPAT_LEVEL_1_0_0_RC2) || defined(USE_CRC14)
 #define ELRS_CRC14_POLY 0x2E57 // 0x372B
 #else
 #define ELRS_CRC_POLY 0x83 // XXX this is wrong, should be 0x07, but need to keep until we no longer need the older compat level

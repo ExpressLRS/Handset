@@ -127,25 +127,6 @@
 #define SWD_LOW  PB5
 #define SWD_HIGH PB4
 
-// Gimbal calibration values
-#define ADC_PITCH_REVERSED true
-#define ADC_PITCH_MIN 913u
-#define ADC_PITCH_CTR 2404u
-#define ADC_PITCH_MAX 3864u
-
-#define ADC_ROLL_REVERSED false
-#define ADC_ROLL_MIN 57u
-#define ADC_ROLL_CTR 1892u
-#define ADC_ROLL_MAX 3763u
-
-#define ADC_THROTTLE_REVERSED false
-#define ADC_THROTTLE_MIN 820u
-#define ADC_THROTTLE_MAX 3860u
-
-#define ADC_YAW_REVERSED true
-#define ADC_YAW_MIN 343u
-#define ADC_YAW_CTR 1838u
-#define ADC_YAW_MAX 3435u
 
 #elif defined(PCB_V1_0)
 
@@ -165,23 +146,9 @@
 #define RE_BUTTON_PORT GPIOC
 #define RE_BUTTON_PIN GPIO_PIN_13
 
-// RC switches
-#define SWA_LOW  PA14
-#define SWA_HIGH PA13
-
-#define SWB_LOW  PC14
-#define SWB_HIGH PC15
-
-#define SWC_LOW  PB3
-#define SWC_HIGH PA15
-
-#define SWD_LOW  PB5
-#define SWD_HIGH PB4
 
 // Buzzer
 #define GPIO_BUZZER PA4
-
-
 
 
 #else

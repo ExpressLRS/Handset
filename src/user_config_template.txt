@@ -34,6 +34,9 @@
 // Use high resolution gimbal data. Requires modified RX and Betaflight firmwares
 #define USE_HIRES_DATA
 
+// Enable CRC14 for native mode (it's already used in compatibility mode)
+#define USE_CRC14
+
 // TODO make this runtime dynamic
 // define the type of radio module being used 
 
@@ -77,4 +80,16 @@
 #define ADC_YAW_CTR 1676u
 #define ADC_YAW_MAX 3335u
 
+// RC switches
+#define SWA_LOW  PA14
+#define SWA_HIGH PA13
+
+#define SWB_LOW  PC14
+#define SWB_HIGH PC15
+
+#define SWC_LOW  PB3
+#define SWC_HIGH PA15
+
+#define SWD_LOW  PB5
+#define SWD_HIGH PB4
 
