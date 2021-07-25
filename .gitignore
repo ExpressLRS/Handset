@@ -1,3 +1,5 @@
 .pio
 .vscode/*
 src/user_config.h
+src/user_config_A1.txt
+src/user_config_V5.txt
