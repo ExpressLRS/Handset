@@ -1019,7 +1019,8 @@ void adc_config(void)
    adc_data_alignment_config(ADC0, ADC_DATAALIGN_RIGHT);
    adc_channel_length_config(ADC0, ADC_REGULAR_CHANNEL, 4);
 
-   adc_oversample_mode_config(ADC0, ADC_OVERSAMPLING_ALL_CONVERT, ADC_OVERSAMPLING_SHIFT_4B, ADC_OVERSAMPLING_RATIO_MUL16);
+   // Shift 3B gives a 13bit result with enough range on the FrSky hall sensors to give full 4096 steps for 12bit OTA
+   adc_oversample_mode_config(ADC0, ADC_OVERSAMPLING_ALL_CONVERT, ADC_OVERSAMPLING_SHIFT_3B, ADC_OVERSAMPLING_RATIO_MUL16);
    adc_oversample_mode_enable(ADC0);
 
    // sampletime 28 -> 333333 sps good for 8x oversampling, 10k rate
