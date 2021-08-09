@@ -26,3 +26,6 @@ At this time the best source of information on this project is our OneDrive fold
 
 https://1drv.ms/u/s!Ap0n6SxbLP9mspxu-dxmtthcFGTxvA?e=23NiK6
 
+If you've read this far...
+
+![image](https://github.com/ExpressLRS/Handset/blob/master/images/FNW-case.jpg)
